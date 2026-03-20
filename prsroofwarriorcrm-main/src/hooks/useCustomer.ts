@@ -1,0 +1,91 @@
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
+
+export type Customer = Tables<"customers">;
+
+export function useCustomer(id: string | undefined) {
+  return useQuery({
+    queryKey: ["customer", id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("id", id!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+export type CustomerJob = Tables<"jobs"> & {
+  payment_checks?: { amount: number; status: string }[];
+};
+
+export function useCustomerJobs(customerId: string | undefined) {
+  return useQuery({
+    queryKey: ["customer-jobs", customerId],
+    enabled: !!customerId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("jobs")
+        .select("*, payment_checks(amount, status)")
+        .eq("customer_id", customerId!)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as CustomerJob[];
+    },
+  });
+}
+
+export function useCustomerAppointments(customerId: string | undefined) {
+  return useQuery({
+    queryKey: ["customer-appointments", customerId],
+    enabled: !!customerId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("appointments")
+        .select("*, jobs!inner(id, job_id, customer_id)")
+        .eq("jobs.customer_id", customerId!)
+        .order("date_time", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
+export function useCustomerDocuments(customerId: string | undefined) {
+  return useQuery({
+    queryKey: ["customer-documents", customerId],
+    enabled: !!customerId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("documents")
+        .select("*, jobs!inner(id, job_id, customer_id)")
+        .eq("jobs.customer_id", customerId!)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
+/** Count jobs per customer for the list view */
+export function useCustomerJobCounts() {
+  return useQuery({
+    queryKey: ["customer-job-counts"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("jobs")
+        .select("customer_id");
+      if (error) throw error;
+      const counts: Record<string, number> = {};
+      (data ?? []).forEach((j) => {
+        counts[j.customer_id] = (counts[j.customer_id] || 0) + 1;
+      });
+      return counts;
+    },
+  });
+}

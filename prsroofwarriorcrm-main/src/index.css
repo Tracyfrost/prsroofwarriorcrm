@@ -1,0 +1,129 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@layer base {
+  :root {
+    --background: 210 20% 96%;
+    --foreground: 210 30% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 210 30% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 30% 10%;
+
+    --primary: 210 35% 18%;
+    --primary-foreground: 45 100% 96%;
+
+    --secondary: 210 15% 90%;
+    --secondary-foreground: 210 30% 10%;
+
+    --muted: 210 15% 93%;
+    --muted-foreground: 210 10% 46%;
+
+    --accent: 38 92% 50%;
+    --accent-foreground: 210 35% 12%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 15% 86%;
+    --input: 210 15% 86%;
+    --ring: 210 35% 18%;
+
+    --radius: 0.5rem;
+
+    --success: 152 60% 40%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 210 35% 12%;
+
+    --command-slate: 210 30% 15%;
+    --command-olive: 85 30% 35%;
+    --command-iron: 210 15% 40%;
+
+    --sidebar-background: 210 30% 12%;
+    --sidebar-foreground: 210 15% 80%;
+    --sidebar-primary: 38 92% 50%;
+    --sidebar-primary-foreground: 210 35% 12%;
+    --sidebar-accent: 210 25% 20%;
+    --sidebar-accent-foreground: 210 15% 90%;
+    --sidebar-border: 210 25% 22%;
+    --sidebar-ring: 38 92% 50%;
+    --sidebar-muted: 210 15% 38%;
+
+    /* Warrior Command tactical palette */
+    --wc-ink: #19232D;
+    --wc-olive: #5A6D40;
+    --wc-amber: #F49F0A;
+    --wc-surface-1: #F2F4F6;
+    --wc-surface-2: #D3D7DC;
+    --wc-muted: #65707A;
+    --wc-border: #C2C7CF;
+  }
+
+  .dark {
+    --background: 210 30% 6%;
+    --foreground: 210 15% 92%;
+    --card: 210 30% 10%;
+    --card-foreground: 210 15% 92%;
+    --popover: 210 30% 10%;
+    --popover-foreground: 210 15% 92%;
+    --primary: 38 92% 50%;
+    --primary-foreground: 210 35% 12%;
+    --secondary: 210 25% 16%;
+    --secondary-foreground: 210 15% 92%;
+    --muted: 210 25% 16%;
+    --muted-foreground: 210 10% 55%;
+    --accent: 38 92% 50%;
+    --accent-foreground: 210 35% 12%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 210 25% 18%;
+    --input: 210 25% 18%;
+    --ring: 38 92% 50%;
+    --sidebar-background: 210 35% 8%;
+    --sidebar-foreground: 210 15% 80%;
+    --sidebar-primary: 38 92% 50%;
+    --sidebar-primary-foreground: 210 35% 12%;
+    --sidebar-accent: 210 30% 14%;
+    --sidebar-accent-foreground: 210 15% 90%;
+    --sidebar-border: 210 25% 15%;
+    --sidebar-ring: 38 92% 50%;
+    --sidebar-muted: 210 15% 40%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+}
+
+@layer utilities {
+  .gradient-brand {
+    background: linear-gradient(135deg, hsl(210 30% 15%), hsl(210 25% 25%));
+  }
+  .gradient-accent {
+    background: linear-gradient(135deg, hsl(38 92% 50%), hsl(28 95% 55%));
+  }
+  .gradient-command {
+    background: linear-gradient(135deg, hsl(210 30% 12%), hsl(85 30% 25%), hsl(210 30% 18%));
+  }
+  .shadow-card {
+    box-shadow: 0 1px 3px 0 hsl(210 30% 10% / 0.06), 0 1px 2px -1px hsl(210 30% 10% / 0.06);
+  }
+  .shadow-card-hover {
+    box-shadow: 0 4px 12px -2px hsl(210 30% 10% / 0.1), 0 2px 6px -2px hsl(210 30% 10% / 0.06);
+  }
+  .font-display {
+    font-family: 'Oswald', system-ui, sans-serif;
+  }
+}

@@ -1,0 +1,8 @@
+# Forge Ops CRM — project ref jpwameqbirjeomwhxfyh
+project_id = "jpwameqbirjeomwhxfyh"
+
+[functions.ai-claim-predict]
+verify_jwt = false
+
+[functions.ai-damage-detect]
+verify_jwt = false

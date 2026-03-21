@@ -114,6 +114,7 @@ export type Database = {
           entity_id: string | null
           entity_type: string
           id: string
+          subject_user_id: string | null
           user_id: string
         }
         Insert: {
@@ -123,6 +124,7 @@ export type Database = {
           entity_id?: string | null
           entity_type: string
           id?: string
+          subject_user_id?: string | null
           user_id: string
         }
         Update: {
@@ -132,6 +134,7 @@ export type Database = {
           entity_id?: string | null
           entity_type?: string
           id?: string
+          subject_user_id?: string | null
           user_id?: string
         }
         Relationships: []
@@ -2069,6 +2072,7 @@ export type Database = {
       }
       white_label_config: {
         Row: {
+          app_name: string | null
           colors: Json
           company_name: string
           created_at: string
@@ -2081,6 +2085,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          app_name?: string | null
           colors?: Json
           company_name?: string
           created_at?: string
@@ -2093,6 +2098,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          app_name?: string | null
           colors?: Json
           company_name?: string
           created_at?: string

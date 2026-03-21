@@ -11,8 +11,6 @@ import { useJobStatuses } from "@/hooks/useCustomizations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -66,6 +64,7 @@ export function CreateJobModal({ defaultCustomerId, defaultParentJobId, trigger 
   const { user } = useAuth();
   const { toast } = useToast();
   const createJob = useCreateJob();
+  const subJobModeAvailable = !!defaultParentJobId;
 
   const { data: jobStatuses = [] } = useJobStatuses(true);
   const { data: customers = [] } = useQuery({
@@ -87,13 +86,13 @@ export function CreateJobModal({ defaultCustomerId, defaultParentJobId, trigger 
       status: "lead",
       notes: "",
       claim_number: "",
-      is_sub_job: !!defaultParentJobId,
+      is_sub_job: subJobModeAvailable,
       parent_job_id: defaultParentJobId ?? "",
     },
   });
 
   const watchTrades = form.watch("trade_types");
-  const isSubJob = form.watch("is_sub_job");
+  const isSubJob = subJobModeAvailable;
   const selectedCustomerId = form.watch("customer_id");
   const claimNumber = form.watch("claim_number");
   const parentJobId = form.watch("parent_job_id");
@@ -120,6 +119,7 @@ export function CreateJobModal({ defaultCustomerId, defaultParentJobId, trigger 
 
   const onSubmit = async (values: JobFormValues) => {
     try {
+      const creatingSubJob = subJobModeAvailable && !!values.parent_job_id;
       const jobPayload: any = {
         customer_id: values.customer_id,
         trade_types: values.trade_types,
@@ -129,15 +129,18 @@ export function CreateJobModal({ defaultCustomerId, defaultParentJobId, trigger 
         assigned_user_id: user?.id,
       };
 
-      if (values.is_sub_job && values.parent_job_id) {
+      if (creatingSubJob) {
         jobPayload.parent_job_id = values.parent_job_id;
         // customer_id will be inherited by trigger
       } else if (values.claim_number?.trim()) {
         jobPayload.claim_number = values.claim_number.trim();
+        jobPayload.parent_job_id = null;
+      } else {
+        jobPayload.parent_job_id = null;
       }
 
       const result = await createJob.mutateAsync(jobPayload);
-      toast({ title: values.is_sub_job ? "Sub Job created" : "Job created successfully" });
+      toast({ title: creatingSubJob ? "Sub Job created" : "Job created successfully" });
       setOpen(false);
       form.reset();
       navigate(`/jobs/${result.id}`);
@@ -151,30 +154,25 @@ export function CreateJobModal({ defaultCustomerId, defaultParentJobId, trigger 
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) form.reset({ customer_id: defaultCustomerId ?? "", trade_types: [], status: "lead", notes: "", claim_number: "", is_sub_job: !!defaultParentJobId, parent_job_id: defaultParentJobId ?? "" }); }}>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) form.reset({ customer_id: defaultCustomerId ?? "", trade_types: [], status: "lead", notes: "", claim_number: "", is_sub_job: subJobModeAvailable, parent_job_id: defaultParentJobId ?? "" }); }}>
       <DialogTrigger asChild>
-        {trigger ?? <Button><Plus className="mr-2 h-4 w-4" /> New Job</Button>}
+        {trigger ?? <Button><Plus className="mr-2 h-4 w-4" /> Add Job</Button>}
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>{isSubJob ? "Create Sub Job" : "Create Job"}</DialogTitle></DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {/* Sub Job Toggle */}
-            <BattleTooltip
-              phraseKey="sub_job_toggle"
-              fallback="Turn this on to attach the new job under an existing main job."
-            >
-              <div className="flex items-center gap-3 rounded-lg border p-3">
-                <Switch
-                  checked={isSubJob}
-                  onCheckedChange={(v) => {
-                    form.setValue("is_sub_job", v);
-                    if (!v) form.setValue("parent_job_id", "");
-                  }}
-                />
-                <Label className="text-sm">This is a Sub Job (linked to a Main Job)</Label>
-              </div>
-            </BattleTooltip>
+            {/* Sub Job Context */}
+            {subJobModeAvailable && (
+              <BattleTooltip
+                phraseKey="add_sub_job_btn"
+                fallback="This sub job will be linked to the selected parent job."
+              >
+                <div className="rounded-lg border p-3 text-sm text-muted-foreground">
+                  Creating sub job (supplement/trade/phase) under this main job.
+                </div>
+              </BattleTooltip>
+            )}
 
             {/* Job ID Preview */}
             <div className="rounded-lg bg-muted/50 p-3">

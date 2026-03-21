@@ -1,0 +1,10 @@
+# Cursor / IDE
+.cursor/
+
+# Dependencies (any level)
+node_modules/
+
+# Env files with secrets
+.env
+.env.*
+!.env.example

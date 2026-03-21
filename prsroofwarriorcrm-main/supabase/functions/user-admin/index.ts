@@ -6,7 +6,60 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+type ErrorCode =
+  | "NOT_AUTHENTICATED"
+  | "SESSION_EXPIRED"
+  | "FORBIDDEN"
+  | "DUPLICATE_EMAIL"
+  | "VALIDATION_ERROR"
+  | "SERVER_ERROR";
+
+const json = (body: Record<string, unknown>, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
+function jsonErr(
+  message: string,
+  status: number,
+  code: ErrorCode,
+  extras?: Record<string, unknown>,
+) {
+  return json({ error: message, code, ...extras }, status);
+}
+
+function parseBearerToken(req: Request): string | null {
+  const raw = req.headers.get("Authorization")?.trim();
+  if (!raw) return null;
+  const m = /^Bearer\s+(\S+)$/i.exec(raw);
+  return m?.[1]?.trim() ?? null;
+}
+
+function authFailureResponse(err: { message?: string; code?: string }): Response {
+  const msg = err.message || "Not authenticated";
+  const low = msg.toLowerCase();
+  const c = (err.code || "").toLowerCase();
+  if (low.includes("expired") || c === "session_expired" || low.includes("jwt expired")) {
+    return jsonErr("Session expired. Sign in again.", 401, "SESSION_EXPIRED");
+  }
+  // Do not echo raw GoTrue "Invalid JWT" as the only signal — always include NOT_AUTHENTICATED for the UI.
+  return jsonErr("Session could not be validated.", 401, "NOT_AUTHENTICATED");
+}
+
+const userLevelSchema = z.enum([
+  "highest",
+  "admin",
+  "manager",
+  "lvl5",
+  "lvl4",
+  "lvl3",
+  "lvl2",
+  "lvl1",
+]);
 
 const CreateUserSchema = z.object({
   action: z.literal("create-user"),
@@ -15,6 +68,19 @@ const CreateUserSchema = z.object({
   full_name: z.string().trim().max(100).optional().default(""),
   role: z.enum(["sales_rep", "field_tech", "office_admin", "manager", "owner"]).optional(),
   must_change_password: z.boolean().default(true),
+  phone: z.string().max(30).optional().nullable(),
+  phone_secondary: z.string().max(30).optional().nullable(),
+  address: z.string().max(500).optional().nullable(),
+  manager_id: z.string().uuid().optional().nullable(),
+  profile_picture_url: z.string().max(2000).optional().nullable(),
+  google_drive_link: z.string().max(2000).optional().nullable(),
+  signature_text: z.string().max(500).optional().nullable(),
+  signature_url: z.string().max(2000).optional().nullable(),
+  level: userLevelSchema.optional(),
+  commission_rate: z.number().min(0).max(1).optional(),
+  override_rate: z.number().min(0).max(1).optional(),
+  active: z.boolean().optional(),
+  verified: z.boolean().optional(),
 });
 
 const ResetUserPasswordSchema = z.object({
@@ -55,33 +121,63 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+  if (req.method !== "POST") {
+    return jsonErr("Method not allowed. Use POST.", 405, "VALIDATION_ERROR");
+  }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    if (!supabaseUrl) {
+      console.error("Missing SUPABASE_URL in function env");
+      return jsonErr("Missing server env: SUPABASE_URL", 500, "SERVER_ERROR");
+    }
+    if (!serviceRoleKey) {
+      console.error("Missing SUPABASE_SERVICE_ROLE_KEY in function env");
+      return jsonErr("Missing server env: SUPABASE_SERVICE_ROLE_KEY", 500, "SERVER_ERROR");
+    }
+    if (!anonKey) {
+      console.error("Missing SUPABASE_ANON_KEY in function env");
+      return jsonErr("Missing server env: SUPABASE_ANON_KEY", 500, "SERVER_ERROR");
+    }
 
-    // Verify caller is admin using their JWT
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("Not authenticated");
+    const accessToken = parseBearerToken(req);
+    if (!accessToken) {
+      return jsonErr("Not authenticated: missing or invalid Bearer token", 401, "NOT_AUTHENTICATED");
+    }
 
+    const authHeader = `Bearer ${accessToken}`;
     const anonClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data: { user: caller } } = await anonClient.auth.getUser();
-    if (!caller) throw new Error("Not authenticated");
+    const { data: userData, error: getUserError } = await anonClient.auth.getUser(accessToken);
+    if (getUserError) {
+      return authFailureResponse(getUserError);
+    }
+    const caller = userData.user;
+    if (!caller) {
+      return jsonErr("Not authenticated", 401, "NOT_AUTHENTICATED");
+    }
 
-    // Check admin status
     const { data: isAdmin } = await anonClient.rpc("is_admin", { _user_id: caller.id });
-    if (!isAdmin) throw new Error("Unauthorized: admin role required");
+    if (!isAdmin) {
+      return jsonErr("Unauthorized: admin role required", 403, "FORBIDDEN", {
+        reason: "admin_required",
+      });
+    }
 
-    const rawBody = await req.json();
+    let rawBody: unknown;
+    try {
+      rawBody = await req.json();
+    } catch {
+      return jsonErr("Invalid JSON body", 400, "VALIDATION_ERROR");
+    }
     const validation = RequestSchema.safeParse(rawBody);
     if (!validation.success) {
-      return new Response(
-        JSON.stringify({ error: "Invalid input", details: validation.error.issues.map(i => i.message) }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonErr("Invalid input", 400, "VALIDATION_ERROR", {
+        details: validation.error.issues.map((i) => i.message),
+      });
     }
     const body = validation.data;
 
@@ -96,16 +192,37 @@ serve(async (req) => {
         .eq("user_id", caller.id)
         .single();
       if (!callerProfile || callerProfile.level !== "highest") {
-        return new Response(
-          JSON.stringify({ error: "Unauthorized: Owner (Highest) role required" }),
-          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return jsonErr("Unauthorized: Owner (Highest) role required", 403, "FORBIDDEN", {
+          reason: "owner_required",
+        });
       }
     }
 
     switch (body.action) {
       case "create-user": {
-        const { email, password, full_name, role, must_change_password } = body;
+        const {
+          email,
+          password,
+          full_name,
+          role,
+          must_change_password,
+          phone,
+          phone_secondary,
+          address,
+          manager_id,
+          level,
+          commission_rate,
+          override_rate,
+          active,
+          verified,
+        } = body;
+
+        const norm = (s: string | null | undefined) =>
+          s === undefined || s === null || String(s).trim() === "" ? null : String(s).trim();
+        const profile_picture_url = norm(body.profile_picture_url);
+        const google_drive_link = norm(body.google_drive_link);
+        const signature_text = norm(body.signature_text);
+        const signature_url = norm(body.signature_url);
 
         const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
           email,
@@ -113,22 +230,83 @@ serve(async (req) => {
           email_confirm: true,
           user_metadata: { name: full_name },
         });
-        if (createError) throw createError;
+        if (createError) {
+          const duplicateEmailError =
+            createError.message?.toLowerCase().includes("already") ||
+            createError.message?.toLowerCase().includes("exists") ||
+            createError.message?.toLowerCase().includes("duplicate");
+          if (duplicateEmailError) {
+            return jsonErr("A user with this email already exists.", 409, "DUPLICATE_EMAIL");
+          }
+          throw createError;
+        }
+        if (!newUser?.user?.id) {
+          return jsonErr("Auth user was not created.", 500, "SERVER_ERROR");
+        }
+
+        const newAuthId = newUser.user.id;
+
+        if (manager_id) {
+          const { data: mgr } = await adminClient.from("profiles").select("id").eq("id", manager_id).maybeSingle();
+          if (!mgr?.id) {
+            return jsonErr("Invalid manager: profile not found.", 400, "VALIDATION_ERROR");
+          }
+        }
+
+        const profilePatch: Record<string, unknown> = {
+          must_change_password,
+          name: full_name,
+        };
+        if (phone !== undefined && phone !== null) profilePatch.phone = phone;
+        if (phone_secondary !== undefined && phone_secondary !== null) profilePatch.phone_secondary = phone_secondary;
+        if (address !== undefined && address !== null) profilePatch.address = address;
+        if (manager_id !== undefined) profilePatch.manager_id = manager_id;
+        if (profile_picture_url !== undefined && profile_picture_url !== null) {
+          profilePatch.profile_picture_url = profile_picture_url;
+        }
+        if (google_drive_link !== undefined && google_drive_link !== null) {
+          profilePatch.google_drive_link = google_drive_link;
+        }
+        if (signature_text !== undefined && signature_text !== null) profilePatch.signature_text = signature_text;
+        if (signature_url !== undefined && signature_url !== null) profilePatch.signature_url = signature_url;
+        if (level !== undefined) profilePatch.level = level;
+        if (commission_rate !== undefined) profilePatch.commission_rate = commission_rate;
+        if (override_rate !== undefined) profilePatch.override_rate = override_rate;
+        if (active !== undefined) profilePatch.active = active;
+        if (verified !== undefined) profilePatch.verified = verified;
 
         const { error: profileError } = await adminClient
           .from("profiles")
-          .update({ must_change_password, name: full_name })
-          .eq("user_id", newUser.user.id);
-        if (profileError) console.error("Profile update error:", profileError);
+          .update(profilePatch)
+          .eq("user_id", newAuthId);
+        if (profileError) throw profileError;
 
         if (role) {
           const { error: roleError } = await adminClient
             .from("user_roles")
-            .insert({ user_id: newUser.user.id, role });
-          if (roleError) console.error("Role assign error:", roleError);
+            .insert({ user_id: newAuthId, role });
+          if (roleError) throw roleError;
         }
 
-        result = { success: true, userId: newUser.user.id };
+        await adminClient.from("audits").insert({
+          user_id: caller.id,
+          subject_user_id: newAuthId,
+          entity_type: "user",
+          action: "user_created",
+          entity_id: newAuthId,
+          details: {
+            email,
+            role: role ?? null,
+            performed_by: caller.email,
+            optional_fields: {
+              has_phone: Boolean(phone),
+              has_manager: Boolean(manager_id),
+              has_level: Boolean(level),
+            },
+          },
+        });
+
+        result = { success: true, userId: newAuthId };
         break;
       }
 
@@ -192,6 +370,7 @@ serve(async (req) => {
         // Audit with old/new values
         await adminClient.from("audits").insert({
           user_id: caller.id,
+          subject_user_id: userId,
           entity_type: "user",
           action: "edit_user_contact",
           entity_id: userId,
@@ -207,10 +386,7 @@ serve(async (req) => {
 
         // Prevent self-deletion
         if (userId === caller.id) {
-          return new Response(
-            JSON.stringify({ error: "Cannot delete your own account" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          return jsonErr("Cannot delete your own account", 400, "VALIDATION_ERROR");
         }
 
         // Fetch user info for audit before deletion
@@ -236,6 +412,7 @@ serve(async (req) => {
         // Audit
         await adminClient.from("audits").insert({
           user_id: caller.id,
+          subject_user_id: userId,
           entity_type: "user",
           action: "soft_delete_user",
           entity_id: userId,
@@ -302,24 +479,35 @@ serve(async (req) => {
     }
 
     // Write audit log (for actions that don't already audit above)
-    if (!["edit-user", "soft-delete-user"].includes(body.action)) {
+    if (!["edit-user", "soft-delete-user", "create-user"].includes(body.action)) {
+      const uid = "userId" in body ? body.userId : null;
       await adminClient.from("audits").insert({
         user_id: caller.id,
+        subject_user_id: typeof uid === "string" ? uid : null,
         entity_type: "user",
         action: body.action,
-        entity_id: "userId" in body ? body.userId : null,
+        entity_id: uid,
         details: { email: "email" in body ? body.email : undefined, performed_by: caller.email },
       });
     }
 
-    return new Response(JSON.stringify(result), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return json(result);
+  } catch (error: unknown) {
+    const e = error as { message?: string; status?: number; details?: unknown; code?: string; name?: string };
+    const status = typeof e?.status === "number" && e.status >= 400 ? e.status : 400;
+    console.error("user-admin error:", {
+      message: e?.message,
+      status,
+      details: e?.details ?? null,
+      code: e?.code ?? null,
+      name: e?.name ?? null,
     });
-  } catch (error: any) {
-    console.error("user-admin error:", error);
-    return new Response(
-      JSON.stringify({ error: "An error occurred processing your request" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    const extras = e?.details != null ? { details: e.details } : undefined;
+    return jsonErr(
+      e?.message || "An error occurred processing your request",
+      status,
+      "SERVER_ERROR",
+      extras,
     );
   }
 });

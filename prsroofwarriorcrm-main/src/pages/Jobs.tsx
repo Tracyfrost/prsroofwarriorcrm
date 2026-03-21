@@ -77,9 +77,7 @@ export default function Jobs() {
           </div>
           <CreateJobModal
             trigger={
-              <BattleTooltip phraseKey="new_job">
-                <Button><Plus className="mr-2 h-4 w-4" /> New Job</Button>
-              </BattleTooltip>
+              <Button><Plus className="mr-2 h-4 w-4" /> Add Job</Button>
             }
           />
         </div>

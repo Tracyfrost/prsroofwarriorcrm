@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLeadSources } from "@/hooks/useCustomizations";
+import { normalizeLeadSourceKey } from "@/lib/intake/normalizeLeadSourceKey";
 
 interface ContactEntry { type: string; value: string }
 
@@ -57,9 +58,12 @@ export function AddCustomerModal({ open, onOpenChange }: AddCustomerModalProps) 
   const qc = useQueryClient();
   const { data: leadSources = [] } = useLeadSources(true);
 
+  const normalizedLeadSource = normalizeLeadSourceKey(form.lead_source) ?? form.lead_source;
+
   // Check if the selected source requires pool
-  const selectedSource = leadSources.find(s => s.name === form.lead_source);
+  const selectedSource = leadSources.find(s => s.name === normalizedLeadSource);
   const isPooledSource = selectedSource?.requires_pool ?? false;
+  const hasLeadSource = !!normalizedLeadSource;
 
   // Fetch available package for pooled source
   const { data: availablePackage } = useQuery({
@@ -82,7 +86,7 @@ export function AddCustomerModal({ open, onOpenChange }: AddCustomerModalProps) 
   // Fetch active reps for assignment
   const { data: reps = [] } = useQuery({
     queryKey: ["active_reps"],
-    enabled: isPooledSource,
+    enabled: hasLeadSource,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
@@ -99,13 +103,15 @@ export function AddCustomerModal({ open, onOpenChange }: AddCustomerModalProps) 
     mutationFn: async (f: CustomerForm) => {
       if (!f.firstName.trim() && !f.lastName.trim()) throw new Error("First or Last name is required");
 
-      if (f.lead_source) {
-        const sourceExists = leadSources.some(s => s.name === f.lead_source);
+      const normalizedInputLeadSource = normalizeLeadSourceKey(f.lead_source);
+
+      if (normalizedInputLeadSource) {
+        const sourceExists = leadSources.some(s => s.name === normalizedInputLeadSource);
         if (!sourceExists) throw new Error("Selected lead source is invalid");
       }
 
       // If pooled source, validate
-      const src = leadSources.find(s => s.name === f.lead_source);
+      const src = leadSources.find(s => s.name === normalizedInputLeadSource);
       if (src?.requires_pool) {
         if (!availablePackage) throw new Error("Arsenal Depleted – Forge New Package, Commander!");
         if (!f.assigned_rep_id) throw new Error("A rep must be assigned for pooled leads.");
@@ -132,7 +138,7 @@ export function AddCustomerModal({ open, onOpenChange }: AddCustomerModalProps) 
         notes: f.notes.trim() || "",
         created_by: user?.id,
         customer_number: "auto",
-        lead_source: f.lead_source || null,
+        lead_source: normalizedInputLeadSource || null,
         assigned_rep_id: f.assigned_rep_id || null,
       } as any).select("id").single();
 
@@ -287,7 +293,7 @@ export function AddCustomerModal({ open, onOpenChange }: AddCustomerModalProps) 
             </Select>
           </div>
 
-          {/* Pooled Source: Rep Assignment + Package Preview */}
+          {/* Pooled Source: Package Preview */}
           {isPooledSource && (
             <div className="space-y-3 rounded-lg border border-accent/30 bg-accent/5 p-3">
               <div className="flex items-center gap-2 text-sm font-medium text-accent-foreground">
@@ -303,8 +309,19 @@ export function AddCustomerModal({ open, onOpenChange }: AddCustomerModalProps) 
                   Arsenal Depleted – Forge New Package first!
                 </p>
               )}
+            </div>
+          )}
+
+          {/* Rep assignment for all lead sources */}
+          {hasLeadSource && (
+            <div className="space-y-3 rounded-lg border border-accent/30 bg-accent/5 p-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-accent-foreground">
+                <Users className="h-4 w-4" /> Rep Assignment
+              </div>
               <div className="space-y-1">
-                <Label className="text-xs">Assign to Rep *</Label>
+                <Label className="text-xs">
+                  Assign to Rep {isPooledSource ? <span className="text-destructive">*</span> : null}
+                </Label>
                 <Select value={form.assigned_rep_id} onValueChange={(val) => setForm(prev => ({ ...prev, assigned_rep_id: val }))}>
                   <SelectTrigger className="min-h-[44px]">
                     <SelectValue placeholder="Select rep..." />

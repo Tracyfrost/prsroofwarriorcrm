@@ -91,6 +91,7 @@ export function useUpdateProfileHierarchy() {
       qc.invalidateQueries({ queryKey: ["all-profiles-hierarchy"] });
       qc.invalidateQueries({ queryKey: ["all-profiles"] });
       qc.invalidateQueries({ queryKey: ["profile"] });
+      qc.invalidateQueries({ queryKey: ["audits-for-user"] });
     },
   });
 }
@@ -128,6 +129,22 @@ export function useProfileByUserId(userId: string | undefined) {
   });
 }
 
+export function useProfileByProfileId(profileId: string | undefined) {
+  return useQuery({
+    queryKey: ["profile-by-profile-id", profileId],
+    enabled: !!profileId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", profileId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
 export type ProfileUpdatePayload = {
   profileId: string;
   name?: string;
@@ -146,11 +163,32 @@ export function useUpdateProfile() {
   return useMutation({
     mutationFn: async (payload: ProfileUpdatePayload) => {
       const { profileId, ...fields } = payload;
+      const { data: before, error: fetchErr } = await supabase
+        .from("profiles")
+        .select("user_id")
+        .eq("id", profileId)
+        .single();
+      if (fetchErr) throw fetchErr;
       const { error } = await supabase
         .from("profiles")
         .update(fields)
         .eq("id", profileId);
       if (error) throw error;
+      const changedKeys = Object.keys(fields).filter((k) => (fields as Record<string, unknown>)[k] !== undefined);
+      if (changedKeys.length > 0 && before?.user_id) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const actorId = sessionData.session?.user?.id;
+        if (actorId) {
+          await supabase.from("audits").insert({
+            user_id: actorId,
+            subject_user_id: before.user_id,
+            entity_type: "user",
+            action: "profile_updated",
+            entity_id: before.user_id,
+            details: { updated_fields: changedKeys },
+          });
+        }
+      }
     },
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ["all-profiles-hierarchy"] });
@@ -158,6 +196,7 @@ export function useUpdateProfile() {
       qc.invalidateQueries({ queryKey: ["profile"] });
       qc.invalidateQueries({ queryKey: ["my-profile-hierarchy"] });
       qc.invalidateQueries({ queryKey: ["profile-by-user"] });
+      qc.invalidateQueries({ queryKey: ["audits-for-user"] });
     },
   });
 }

@@ -330,9 +330,7 @@ export default function CustomerDetail() {
               <CreateJobModal
                 defaultCustomerId={customer.id}
                 trigger={
-                  <BattleTooltip phraseKey="add_job_btn">
-                    <Button size="sm"><Plus className="mr-2 h-3 w-3" /> Add Job</Button>
-                  </BattleTooltip>
+                  <Button size="sm"><Plus className="mr-2 h-3 w-3" /> Add Job</Button>
                 }
               />
             </div>

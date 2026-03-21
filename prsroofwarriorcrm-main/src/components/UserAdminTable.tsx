@@ -22,13 +22,55 @@ import {
 } from "@/hooks/useHierarchy";
 import { useUserRoles } from "@/hooks/useProfile";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeUserAdminFunction } from "@/integrations/supabase/invokeUserAdmin";
+import { FunctionsFetchError, FunctionsHttpError, FunctionsRelayError } from "@supabase/supabase-js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Users, Edit2, Plus, MoreHorizontal, KeyRound, RefreshCw, Copy, CheckCircle2, AlertTriangle, Trash2, UserCog, Search, Crown } from "lucide-react";
 import { useOverrideSubscription, useAllSubscriptions, type SubscriptionTier } from "@/hooks/useSubscription";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDistanceToNow } from "date-fns";
+import { formatUserAdminHttpError } from "@/lib/userAdminInvokeError";
+import { CreateUserDialog, type CreateUserPayload } from "@/components/user-admin/CreateUserDialog";
 
 const ROLES = ["sales_rep", "field_tech", "office_admin", "manager", "owner"] as const;
+const USER_ADMIN_FUNCTION = "user-admin";
+
+const getInvokeErrorMessage = async (error: unknown) => {
+  if (error instanceof FunctionsHttpError) {
+    const res = error.context as Response;
+    const status = res?.status;
+    let body: Record<string, unknown> | null = null;
+    let rawFallback = "";
+    try {
+      const raw = await res.clone().text();
+      if (raw) {
+        try {
+          body = JSON.parse(raw) as Record<string, unknown>;
+        } catch {
+          rawFallback = raw;
+        }
+      }
+    } catch {
+      rawFallback = "";
+    }
+    return formatUserAdminHttpError(status, body, rawFallback);
+  }
+
+  if (error instanceof FunctionsRelayError) {
+    return "Edge Function relay error. Check function deployment and project ref.";
+  }
+
+  if (error instanceof FunctionsFetchError) {
+    const hasSupabaseUrl = Boolean(import.meta.env.VITE_SUPABASE_URL);
+    if (!hasSupabaseUrl) {
+      return "Supabase URL is missing (VITE_SUPABASE_URL). Configure frontend env vars and restart the app.";
+    }
+    return `Could not reach the user-admin function (${error.message}). Confirm "${USER_ADMIN_FUNCTION}" is deployed and your Supabase URL matches this environment.`;
+  }
+
+  if (error instanceof Error) return error.message;
+  return "Unexpected error while invoking Edge Function.";
+};
 
 interface UserAdminTableProps {
   users: ProfileWithHierarchy[];
@@ -57,13 +99,7 @@ export function UserAdminTable({ users, isLoading }: UserAdminTableProps) {
   const [editCommRate, setEditCommRate] = useState("");
   const [editOverride, setEditOverride] = useState("");
 
-  // Create user dialog
   const [showCreate, setShowCreate] = useState(false);
-  const [createName, setCreateName] = useState("");
-  const [createEmail, setCreateEmail] = useState("");
-  const [createRole, setCreateRole] = useState<string>("sales_rep");
-  const [createPassword, setCreatePassword] = useState("");
-  const [createMustChange, setCreateMustChange] = useState(true);
 
   // Success screen
   const [createdUser, setCreatedUser] = useState<{ email: string; role: string; password: string } | null>(null);
@@ -106,80 +142,121 @@ export function UserAdminTable({ users, isLoading }: UserAdminTableProps) {
       await supabase.from("user_roles").delete().eq("user_id", userId);
       const { error } = await supabase.from("user_roles").insert({ user_id: userId, role: role as any });
       if (error) throw error;
-      await writeAudit("role_change", userId, { role });
+      await writeAudit("role_change", userId, { role }, userId);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["all-profiles-hierarchy"] });
       qc.invalidateQueries({ queryKey: ["user_roles"] });
+      qc.invalidateQueries({ queryKey: ["audits-for-user"] });
       toast({ title: "Role updated" });
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const toggleVerified = useMutation({
-    mutationFn: async ({ profileId, verified }: { profileId: string; verified: boolean }) => {
+    mutationFn: async ({
+      profileId,
+      subjectUserId,
+      verified,
+    }: {
+      profileId: string;
+      subjectUserId: string;
+      verified: boolean;
+    }) => {
       const { error } = await supabase.from("profiles").update({ verified } as any).eq("id", profileId);
       if (error) throw error;
-      await writeAudit(verified ? "verify_user" : "unverify_user", profileId);
+      await writeAudit(verified ? "verify_user" : "unverify_user", profileId, {}, subjectUserId);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["all-profiles-hierarchy"] });
+      qc.invalidateQueries({ queryKey: ["audits-for-user"] });
       toast({ title: "Verification status updated" });
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const toggleActive = useMutation({
-    mutationFn: async ({ profileId, active }: { profileId: string; active: boolean }) => {
+    mutationFn: async ({
+      profileId,
+      subjectUserId,
+      active,
+    }: {
+      profileId: string;
+      subjectUserId: string;
+      active: boolean;
+    }) => {
       const { error } = await supabase.from("profiles").update({ active }).eq("id", profileId);
       if (error) throw error;
-      await writeAudit(active ? "activate_user" : "deactivate_user", profileId);
+      await writeAudit(active ? "activate_user" : "deactivate_user", profileId, {}, subjectUserId);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["all-profiles-hierarchy"] });
+      qc.invalidateQueries({ queryKey: ["audits-for-user"] });
       toast({ title: "User status updated" });
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const toggleMustChange = useMutation({
-    mutationFn: async ({ profileId, must_change_password }: { profileId: string; must_change_password: boolean }) => {
+    mutationFn: async ({
+      profileId,
+      subjectUserId,
+      must_change_password,
+    }: {
+      profileId: string;
+      subjectUserId: string;
+      must_change_password: boolean;
+    }) => {
       const { error } = await supabase.from("profiles").update({ must_change_password }).eq("id", profileId);
       if (error) throw error;
-      await writeAudit("toggle_must_change_password", profileId, { must_change_password });
+      await writeAudit("toggle_must_change_password", profileId, { must_change_password }, subjectUserId);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["all-profiles-hierarchy"] });
+      qc.invalidateQueries({ queryKey: ["audits-for-user"] });
       toast({ title: "Must change password updated" });
     },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const createUser = useMutation({
-    mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("user-admin", {
-        body: {
-          action: "create-user",
-          email: createEmail,
-          password: createPassword,
-          full_name: createName,
-          role: createRole,
-          must_change_password: createMustChange,
-        },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return data;
+    mutationFn: async (payload: CreateUserPayload) => {
+      const functionName = USER_ADMIN_FUNCTION;
+      const hasSupabaseUrl = Boolean(import.meta.env.VITE_SUPABASE_URL);
+      if (!hasSupabaseUrl) {
+        throw new Error("Missing VITE_SUPABASE_URL. Cannot invoke Supabase Edge Functions from browser.");
+      }
+      try {
+        console.info("Create user invoking (JWT refreshed inside helper)", {
+          functionName,
+          action: payload.action,
+          hasSupabaseUrl,
+        });
+        const { data, error } = await invokeUserAdminFunction(functionName, payload);
+        if (error) throw error;
+        if (data?.error) throw new Error(String(data.error));
+        return data;
+      } catch (error) {
+        const normalizedMessage = await getInvokeErrorMessage(error);
+        console.error("Create user invoke failed", {
+          functionName,
+          action: payload.action,
+          hasSupabaseUrl,
+          rawErrorMessage: error instanceof Error ? error.message : "unknown",
+          errorMessage: normalizedMessage,
+        });
+        throw new Error(normalizedMessage);
+      }
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ["all-profiles-hierarchy"] });
-      setCreatedUser({ email: createEmail, role: createRole, password: createPassword });
+      qc.invalidateQueries({ queryKey: ["audits-for-user"] });
+      setCreatedUser({
+        email: variables.email,
+        role: variables.role,
+        password: variables.password,
+      });
       setShowCreate(false);
-      setCreateName("");
-      setCreateEmail("");
-      setCreateRole("sales_rep");
-      setCreatePassword("");
-      setCreateMustChange(true);
     },
     onError: (e: Error) => toast({ title: "Create user failed", description: e.message, variant: "destructive" }),
   });
@@ -187,17 +264,19 @@ export function UserAdminTable({ users, isLoading }: UserAdminTableProps) {
   const resetUserPassword = useMutation({
     mutationFn: async () => {
       if (!resetUser) throw new Error("No user selected");
-      const { data, error } = await supabase.functions.invoke("user-admin", {
-        body: {
+      try {
+        const { data, error } = await invokeUserAdminFunction(USER_ADMIN_FUNCTION, {
           action: "reset-user-password",
           userId: resetUser.user_id,
           new_password: resetPassword,
           must_change_password: resetMustChange,
-        },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return data;
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error as string);
+        return data;
+      } catch (e) {
+        throw new Error(await getInvokeErrorMessage(e));
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["all-profiles-hierarchy"] });
@@ -212,18 +291,20 @@ export function UserAdminTable({ users, isLoading }: UserAdminTableProps) {
   const editContact = useMutation({
     mutationFn: async () => {
       if (!editContactUser) throw new Error("No user selected");
-      const { data, error } = await supabase.functions.invoke("user-admin", {
-        body: {
+      try {
+        const { data, error } = await invokeUserAdminFunction(USER_ADMIN_FUNCTION, {
           action: "edit-user",
           userId: editContactUser.user_id,
           name: editContactName || undefined,
           email: editContactEmail || undefined,
           phone: editContactPhone || null,
-        },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return data;
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error as string);
+        return data;
+      } catch (e) {
+        throw new Error(await getInvokeErrorMessage(e));
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["all-profiles-hierarchy"] });
@@ -236,16 +317,18 @@ export function UserAdminTable({ users, isLoading }: UserAdminTableProps) {
   const softDeleteUser = useMutation({
     mutationFn: async () => {
       if (!deleteUser) throw new Error("No user selected");
-      const { data, error } = await supabase.functions.invoke("user-admin", {
-        body: {
+      try {
+        const { data, error } = await invokeUserAdminFunction(USER_ADMIN_FUNCTION, {
           action: "soft-delete-user",
           userId: deleteUser.user_id,
           reassign_to_user_id: reassignUserId !== "none" ? reassignUserId : null,
-        },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return data;
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error as string);
+        return data;
+      } catch (e) {
+        throw new Error(await getInvokeErrorMessage(e));
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["all-profiles-hierarchy"] });
@@ -259,12 +342,18 @@ export function UserAdminTable({ users, isLoading }: UserAdminTableProps) {
 
   const userAction = useMutation({
     mutationFn: async ({ action, email, userId }: { action: string; email: string; userId?: string }) => {
-      const { data, error } = await supabase.functions.invoke("user-admin", {
-        body: { action, email, userId },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return data;
+      try {
+        const { data, error } = await invokeUserAdminFunction(USER_ADMIN_FUNCTION, {
+          action,
+          email,
+          userId,
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error as string);
+        return data;
+      } catch (e) {
+        throw new Error(await getInvokeErrorMessage(e));
+      }
     },
     onSuccess: (_, vars) => {
       const labels: Record<string, string> = { "resend-invite": "Invitation resent" };
@@ -273,10 +362,16 @@ export function UserAdminTable({ users, isLoading }: UserAdminTableProps) {
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const writeAudit = async (action: string, entityId: string, details?: Record<string, unknown>) => {
+  const writeAudit = async (
+    action: string,
+    entityId: string,
+    details?: Record<string, unknown>,
+    subjectUserId?: string | null,
+  ) => {
     if (!user) return;
     await supabase.from("audits").insert([{
       user_id: user.id,
+      subject_user_id: subjectUserId ?? null,
       entity_type: "user",
       action,
       entity_id: entityId,
@@ -351,12 +446,18 @@ export function UserAdminTable({ users, isLoading }: UserAdminTableProps) {
         commission_rate: parseFloat(editCommRate) || 0,
         override_rate: parseFloat(editOverride) || 0,
       });
-      await writeAudit("hierarchy_update", editUser.id, {
-        level: editLevel,
-        manager_id: editManagerId === "none" ? null : editManagerId,
-        commission_rate: parseFloat(editCommRate) || 0,
-        override_rate: parseFloat(editOverride) || 0,
-      });
+      await writeAudit(
+        "hierarchy_update",
+        editUser.id,
+        {
+          level: editLevel,
+          manager_id: editManagerId === "none" ? null : editManagerId,
+          commission_rate: parseFloat(editCommRate) || 0,
+          override_rate: parseFloat(editOverride) || 0,
+        },
+        editUser.user_id,
+      );
+      qc.invalidateQueries({ queryKey: ["audits-for-user"] });
       toast({ title: "Hierarchy updated" });
       setEditUser(null);
     } catch (e: any) {
@@ -485,7 +586,9 @@ export function UserAdminTable({ users, isLoading }: UserAdminTableProps) {
                       <TableCell>
                         <Switch
                           checked={u.verified}
-                          onCheckedChange={(checked) => toggleVerified.mutate({ profileId: u.id, verified: checked })}
+                          onCheckedChange={(checked) =>
+                            toggleVerified.mutate({ profileId: u.id, subjectUserId: u.user_id, verified: checked })
+                          }
                           disabled={toggleVerified.isPending || isDeleted}
                         />
                       </TableCell>
@@ -494,7 +597,9 @@ export function UserAdminTable({ users, isLoading }: UserAdminTableProps) {
                           variant={u.active ? "default" : "secondary"}
                           size="sm"
                           className="text-xs h-7"
-                          onClick={() => toggleActive.mutate({ profileId: u.id, active: !u.active })}
+                          onClick={() =>
+                            toggleActive.mutate({ profileId: u.id, subjectUserId: u.user_id, active: !u.active })
+                          }
                           disabled={isDeleted}
                         >
                           {u.active ? "Active" : "Inactive"}
@@ -503,7 +608,13 @@ export function UserAdminTable({ users, isLoading }: UserAdminTableProps) {
                       <TableCell>
                         <Switch
                           checked={(u as any).must_change_password ?? false}
-                          onCheckedChange={(checked) => toggleMustChange.mutate({ profileId: u.id, must_change_password: checked })}
+                          onCheckedChange={(checked) =>
+                            toggleMustChange.mutate({
+                              profileId: u.id,
+                              subjectUserId: u.user_id,
+                              must_change_password: checked,
+                            })
+                          }
                           disabled={toggleMustChange.isPending || isDeleted}
                         />
                       </TableCell>
@@ -569,44 +680,13 @@ export function UserAdminTable({ users, isLoading }: UserAdminTableProps) {
         </CardContent>
       </Card>
 
-      {/* Create User Dialog */}
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Create User</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Full Name *</Label>
-              <Input value={createName} onChange={(e) => setCreateName(e.target.value)} placeholder="John Smith" maxLength={100} />
-            </div>
-            <div className="space-y-2">
-              <Label>Email *</Label>
-              <Input type="email" value={createEmail} onChange={(e) => setCreateEmail(e.target.value)} placeholder="user@example.com" />
-            </div>
-            <div className="space-y-2">
-              <Label>Role</Label>
-              <Select value={createRole} onValueChange={setCreateRole}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {ROLES.map((r) => (
-                    <SelectItem key={r} value={r}>{r.replace("_", " ")}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Temporary Password *</Label>
-              <PasswordInput value={createPassword} onChange={(e) => setCreatePassword(e.target.value)} placeholder="Set initial password" minLength={6} />
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox id="must-change" checked={createMustChange} onCheckedChange={(checked) => setCreateMustChange(checked === true)} />
-              <Label htmlFor="must-change" className="text-sm font-normal">Require password change on first login</Label>
-            </div>
-            <Button onClick={() => createUser.mutate()} className="w-full" disabled={createUser.isPending || !createEmail || !createPassword || !createName}>
-              {createUser.isPending ? "Creating..." : "Create User"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <CreateUserDialog
+        open={showCreate}
+        onOpenChange={setShowCreate}
+        users={users}
+        isPending={createUser.isPending}
+        onSubmit={(payload) => createUser.mutate(payload)}
+      />
 
       {/* User Created Success Dialog */}
       <Dialog open={!!createdUser} onOpenChange={() => { setCreatedUser(null); setCopied(false); }}>
@@ -650,7 +730,7 @@ export function UserAdminTable({ users, isLoading }: UserAdminTableProps) {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>New Password *</Label>
-              <PasswordInput value={resetPassword} onChange={(e) => setResetPassword(e.target.value)} placeholder="Enter new password" minLength={6} />
+              <PasswordInput value={resetPassword} onChange={(e) => setResetPassword(e.target.value)} placeholder="Enter new password" minLength={8} />
             </div>
             <div className="flex items-center space-x-2">
               <Checkbox id="reset-must-change" checked={resetMustChange} onCheckedChange={(checked) => setResetMustChange(checked === true)} />

@@ -472,9 +472,7 @@ export default function JobDetail() {
                    defaultCustomerId={job.customer_id}
                    defaultParentJobId={job.id}
                    trigger={
-                     <BattleTooltip phraseKey="add_sub_job_btn">
-                       <Button variant="outline" size="sm"><Plus className="mr-1 h-3 w-3" /> Add Sub Job</Button>
-                     </BattleTooltip>
+                    <Button variant="outline" size="sm"><Plus className="mr-1 h-3 w-3" /> Add Sub Job</Button>
                    }
                  />
                )}

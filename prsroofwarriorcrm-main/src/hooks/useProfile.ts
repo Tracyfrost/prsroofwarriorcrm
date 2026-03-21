@@ -38,3 +38,18 @@ export function useUserRoles() {
     enabled: !!user,
   });
 }
+
+export function useRolesForUserId(userId: string | undefined) {
+  return useQuery({
+    queryKey: ["user_roles", userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId!);
+      if (error) throw error;
+      return data?.map((r) => r.role) ?? [];
+    },
+  });
+}

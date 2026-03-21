@@ -43,7 +43,7 @@ export function useWhiteLabel() {
             id: data.id,
             tenant_id: data.tenant_id,
             company_name: data.company_name,
-            app_name: (data as any).app_name ?? null,
+            app_name: data.app_name ?? null,
             logo_url: data.logo_url,
             colors: data.colors as Record<string, string>,
             icon_style: data.icon_style,

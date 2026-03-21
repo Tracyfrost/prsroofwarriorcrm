@@ -2,15 +2,21 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/lib/auth";
-import { useProfileByUserId, useUpdateProfile, LEVEL_CONFIG } from "@/hooks/useHierarchy";
-import { useAuditsByUserId } from "@/hooks/useAudits";
+import { useProfileByUserId, useUpdateProfile } from "@/hooks/useHierarchy";
+import { useAuditsForUser } from "@/hooks/useAudits";
+import { useUserProfileKpis, useRecentUserAuditCount } from "@/hooks/useUserProfileKpis";
+import { useRolesForUserId } from "@/hooks/useProfile";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Mail, Phone, MapPin, ExternalLink, Pencil, FileText, Image, Car, Calendar, FolderOpen, User } from "lucide-react";
-import { format, formatDistanceToNow, addDays } from "date-fns";
+import { UserProfileHero } from "@/components/user-profile/UserProfileHero";
+import { UserProfileIdentityZone } from "@/components/user-profile/UserProfileIdentityZone";
+import { UserProfilePerformanceZone } from "@/components/user-profile/UserProfilePerformanceZone";
+import { computeProfileCompletionPercent } from "@/lib/profileCompletion";
+import { accountHealthFromScore, computeOperatorScore } from "@/lib/operatorScore";
+import { ArrowLeft, FileText, Image, Car, Calendar, FolderOpen, Mail, Phone, MapPin, ExternalLink } from "lucide-react";
+import { format, addDays } from "date-fns";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useToast } from "@/hooks/use-toast";
 import NotFound from "@/pages/NotFound";
@@ -20,7 +26,6 @@ import {
   useUploadUserDocument,
   useDeleteUserDocument,
 } from "@/hooks/useUserDocuments";
-import { useQuery } from "@tanstack/react-query";
 import { useTimeOffRequests, useCreateTimeOffRequest, useUpdateTimeOffRequest } from "@/hooks/useTimeOff";
 import { Calendar as BigCalendar, dateFnsLocalizer } from "react-big-calendar";
 import { format as fmt, parse, startOfWeek, getDay } from "date-fns";
@@ -36,35 +41,6 @@ const DOC_TYPES = [
   { value: "profile_pic", label: "Profile Pics", icon: Image },
 ] as const;
 
-function ProfileAvatar({
-  profile,
-  className = "h-16 w-16 rounded-full object-cover",
-}: {
-  profile: { name: string; profile_picture_url?: string | null; user_id: string };
-  className?: string;
-}) {
-  const path = profile.profile_picture_url && !profile.profile_picture_url.startsWith("http")
-    ? profile.profile_picture_url
-    : null;
-  const { data: avatarUrl } = useQuery({
-    queryKey: ["profile-avatar-url", profile.user_id, path],
-    enabled: !!path,
-    queryFn: () => getUserDocumentUrl(path!),
-  });
-  const src = path ? avatarUrl : (profile.profile_picture_url?.startsWith("http") ? profile.profile_picture_url : null);
-  const initial = (profile.name || "?").trim().split(/\s+/).map((n) => n[0]).slice(0, 2).join("").toUpperCase();
-  if (src) {
-    return <img src={src} alt={profile.name} className={className} />;
-  }
-  return (
-    <div
-      className={`flex items-center justify-center rounded-full bg-muted text-muted-foreground font-semibold ${className}`}
-    >
-      {initial || "?"}
-    </div>
-  );
-}
-
 export default function UserProfilePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -79,7 +55,12 @@ export default function UserProfilePage() {
   }, [id, user, navigate]);
 
   const { data: profile, isLoading: profileLoading } = useProfileByUserId(resolvedUserId);
-  const { data: audits = [] } = useAuditsByUserId(resolvedUserId);
+  const { data: audits = [], isLoading: auditsLoading } = useAuditsForUser(resolvedUserId);
+  const { data: roles = [] } = useRolesForUserId(resolvedUserId);
+  const { data: kpis, isLoading: kpisLoading } = useUserProfileKpis(resolvedUserId);
+  const { data: auditCount30d = 0 } = useRecentUserAuditCount(resolvedUserId);
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
+
   const canEdit =
     profile && user && (user.id === profile.user_id || can("manage_users") || isOwnerOrAdmin);
 
@@ -89,7 +70,17 @@ export default function UserProfilePage() {
     return <NotFound />;
   }
 
-  const levelConfig = profile ? (LEVEL_CONFIG[profile.level] || LEVEL_CONFIG.lvl1) : null;
+  const completionPct = profile ? computeProfileCompletionPercent(profile) : 0;
+  const roleLabel = roles[0] ?? "—";
+  const operatorScore = profile
+    ? computeOperatorScore({
+        profileCompletion: completionPct,
+        lastLoginAt: profile.last_login,
+        auditCount30d,
+        jobsClosedThisMonth: kpis?.jobsClosedThisMonth ?? 0,
+      })
+    : 0;
+  const accountHealth = profile ? accountHealthFromScore(operatorScore, profile.active) : "ok";
 
   return (
     <AppLayout>
@@ -109,141 +100,71 @@ export default function UserProfilePage() {
 
         {profile && (
           <>
-            {/* Header: name, address, avatar, level, Edit */}
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-4">
-                    <ProfileAvatar profile={profile} />
-                    <div>
-                      <h1 className="text-2xl font-bold tracking-tight">{profile.name}</h1>
-                      {profile.address && (
-                        <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">
-                          <MapPin className="h-3.5 w-3" /> {profile.address}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {levelConfig && (
-                      <Badge variant="secondary" className="text-sm">
-                        {levelConfig.badge} {levelConfig.label}
-                      </Badge>
-                    )}
-                    {canEdit && (
-                      <EditProfileButton profile={profile} />
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <UserProfileHero
+              profile={profile}
+              roleLabel={roleLabel}
+              onEdit={() => setEditProfileOpen(true)}
+              canEdit={!!canEdit}
+            />
+            {editProfileOpen && (
+              <EditProfileModal profile={profile} onClose={() => setEditProfileOpen(false)} />
+            )}
 
-            {/* Three columns: Left (contact + Drive), Center (signature), Right (activity) */}
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              {/* Left: contact + Google Drive */}
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <User className="h-4 w-4" /> My profile
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  {profile.address && (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Contact</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    {profile.address && (
+                      <p className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+                        {profile.address}
+                      </p>
+                    )}
                     <p className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
-                      {profile.address}
+                      <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
+                      {profile.email}
                     </p>
-                  )}
-                  <p className="flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
-                    {profile.email}
-                  </p>
-                  <p className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
-                    {profile.phone || "—"}
-                  </p>
-                  {profile.phone_secondary && (
                     <p className="flex items-center gap-2">
                       <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span className="text-muted-foreground">JP Phone:</span> {profile.phone_secondary}
+                      {profile.phone || "—"}
                     </p>
-                  )}
-                  <p className="text-muted-foreground">
-                    User since {format(new Date(profile.created_at), "MMM d, yyyy")}
-                  </p>
-                  {profile.google_drive_link && (
-                    <div className="pt-2">
-                      <a
-                        href={profile.google_drive_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 text-primary hover:underline"
-                      >
-                        <ExternalLink className="h-4 w-4" /> Open Google Drive
-                      </a>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Center: signature */}
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Signature</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {(profile.signature_url || profile.signature_text) ? (
-                    <div className="border-2 border-dashed rounded-lg p-4 min-h-[100px] flex items-center justify-center">
-                      {profile.signature_url ? (
-                        <img
-                          src={profile.signature_url}
-                          alt="Signature"
-                          className="max-h-24 w-auto object-contain"
-                        />
-                      ) : (
-                        <p className="text-lg italic text-muted-foreground font-serif">
-                          {profile.signature_text}
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="border-2 border-dashed rounded-lg p-4 min-h-[100px] flex items-center justify-center text-muted-foreground text-sm">
-                      No signature
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Right: activity */}
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Activity</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-3 max-h-[320px] overflow-y-auto">
-                    {audits.length === 0 ? (
-                      <li className="text-sm text-muted-foreground">No activity yet.</li>
-                    ) : (
-                      audits.map((a) => (
-                        <li key={a.id} className="flex gap-3 text-sm">
-                          <ProfileAvatar
-                            profile={{ name: profile.name, profile_picture_url: profile.profile_picture_url, user_id: profile.user_id }}
-                            className="h-8 w-8 rounded-full shrink-0"
-                          />
-                          <div className="min-w-0">
-                            <p className="text-foreground">
-                              {formatAuditAction(a.action, a.entity_type, a.details)}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}
-                            </p>
-                          </div>
-                        </li>
-                      ))
+                    {profile.phone_secondary && (
+                      <p className="flex items-center gap-2">
+                        <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="text-muted-foreground">Secondary:</span> {profile.phone_secondary}
+                      </p>
                     )}
-                  </ul>
-                </CardContent>
-              </Card>
+                    <p className="text-muted-foreground">
+                      User since {format(new Date(profile.created_at), "MMM d, yyyy")}
+                    </p>
+                    {profile.google_drive_link && (
+                      <div className="pt-2">
+                        <a
+                          href={profile.google_drive_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 text-primary hover:underline"
+                        >
+                          <ExternalLink className="h-4 w-4" /> Open Google Drive
+                        </a>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+                <UserProfileIdentityZone profile={profile} completionPercent={completionPct} />
+              </div>
+              <UserProfilePerformanceZone
+                profile={profile}
+                kpis={kpis}
+                kpisLoading={kpisLoading}
+                audits={audits}
+                auditsLoading={auditsLoading}
+                operatorScore={operatorScore}
+                accountHealth={accountHealth}
+              />
             </div>
 
             {/* Tabs */}
@@ -293,35 +214,6 @@ export default function UserProfilePage() {
         )}
       </div>
     </AppLayout>
-  );
-}
-
-function formatAuditAction(action: string, entityType: string, details: unknown): string {
-  const d = details as Record<string, unknown> | null;
-  if (action === "edit_user_contact" && d?.email) {
-    return `Updated contact info`;
-  }
-  if (action === "soft_delete_user") {
-    return `Account deactivated`;
-  }
-  return `${action.replace(/_/g, " ")} (${entityType})`;
-}
-
-function EditProfileButton({ profile }: { profile: { id: string; name: string } }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <Pencil className="h-3.5 w-3.5 mr-1.5" />
-        Edit profile
-      </Button>
-      {open && (
-        <EditProfileModal
-          profile={profile}
-          onClose={() => setOpen(false)}
-        />
-      )}
-    </>
   );
 }
 

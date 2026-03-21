@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import Papa from "papaparse";
 import { Upload, Download, FileSpreadsheet, Wand2, ArrowRightLeft, CheckCircle2, Sparkles, GripVertical, AlertCircle, Loader2 } from "lucide-react";
+import { normalizeLeadSourceKey } from "@/lib/intake/normalizeLeadSourceKey";
 
 const SCHEMA_FIELDS = [
   "name_json.primary.first", "name_json.primary.last",
@@ -133,7 +134,9 @@ export function DataForgeTab() {
         case "main_address.city": customer.main_address.city = val; break;
         case "main_address.state": customer.main_address.state = val; break;
         case "main_address.zip": customer.main_address.zip = val; break;
-        case "lead_source": customer.lead_source = val; break;
+        case "lead_source":
+          customer.lead_source = normalizeLeadSourceKey(val);
+          break;
         case "insurance_carrier": customer.insurance_carrier = val; break;
         case "notes": customer.notes = val; break;
         case "customer_type": customer.customer_type = val === "commercial" ? "commercial" : "residential"; break;

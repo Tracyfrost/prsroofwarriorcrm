@@ -80,7 +80,7 @@ export function BrandingTab() {
   if (config && !initialized) {
     setCompanyName(config.company_name);
     setLogoUrl(config.logo_url ?? "");
-    setAppName((config as any).app_name ?? "");
+    setAppName(config.app_name ?? "");
     setColors({ ...DEFAULT_COLORS, ...config.colors });
     setTooltipPhrases(config.tooltip_phrases ?? {});
     setInitialized(true);
@@ -230,6 +230,10 @@ export function BrandingTab() {
               />
               <p className="text-xs text-muted-foreground">
                 Controls the base browser tab title (e.g. Jobs – {`{AppName}`}). Falls back to company name if empty.
+              </p>
+              <p className="text-xs font-mono text-muted-foreground rounded-md border border-border/60 bg-muted/40 px-2 py-1.5">
+                Preview: Jobs –{" "}
+                {(appName.trim() || companyName.trim() || "PRS CRM")}
               </p>
             </div>
             <div className="space-y-2">

@@ -54,11 +54,13 @@ If `supabase` is not in PATH, use the full path or install via npm:
 3. Then run every subsequent file in the same numeric order (e.g. 20260209225551, 20260209231358, … through 20260314000000).
 4. Run each file as one script; do not reorder or skip.
 
+**Branding / browser tab (`app_name`):** Settings → Branding → “App Name (Browser Tab)” persists to `white_label_config.app_name`. That column is added by migration `20260320120000_white_label_config_app_name.sql`. After pulling this repo, run `supabase db push` (or apply that migration in the SQL Editor) on your hosted project so saves succeed.
+
 **If push fails:** Inspect the **first** migration that errors (the filename is in the error). Common causes: missing extension (e.g. `uuid-ossp`), or a type/table that a later migration expects. Fix that migration or run any required setup (e.g. enable extension) then re-run from that file onward.
 
 **Migration order (run in this order if using SQL Editor):**  
 First file: `20260209221957_215accab-a3a8-4cd7-9c0d-33caaf8c208f.sql`  
-Then every other file in `supabase/migrations/` sorted by filename (timestamp prefix). Last file: `20260314000000_add_squares_tracking.sql`.
+Then every other file in `supabase/migrations/` sorted by filename (timestamp prefix). Last file (as of this doc): `20260320120000_white_label_config_app_name.sql`.
 
 ## After schema is applied
 
@@ -66,3 +68,13 @@ Then every other file in `supabase/migrations/` sorted by filename (timestamp pr
   - `npx supabase gen types typescript --project-id jpwameqbirjeomwhxfyh > src/integrations/supabase/types.ts`
   - (Requires Supabase CLI and `supabase link` or `--project-id` and DB connection.)
 - **App:** Restart dev server after changing `.env`. The client in `src/integrations/supabase/client.ts` reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` only.
+
+## Edge Functions (`user-admin`)
+
+After changing `supabase/config.toml` or `supabase/functions/user-admin/`, deploy so hosted settings apply:
+
+```bash
+supabase functions deploy user-admin
+```
+
+`[functions.user-admin] verify_jwt` in `config.toml` controls the API gateway; the function still validates the caller JWT with `auth.getUser` before admin actions.

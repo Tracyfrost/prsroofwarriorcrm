@@ -149,11 +149,12 @@ export function useCreateJob() {
 
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["jobs"] });
       qc.invalidateQueries({ queryKey: ["main-jobs"] });
       qc.invalidateQueries({ queryKey: ["job-count"] });
       qc.invalidateQueries({ queryKey: ["sub-jobs"] });
+      qc.invalidateQueries({ queryKey: ["customer-jobs", data.customer_id] });
     },
   });
 }

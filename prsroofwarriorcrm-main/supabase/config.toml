@@ -6,3 +6,7 @@ verify_jwt = false
 
 [functions.ai-damage-detect]
 verify_jwt = false
+
+[functions.user-admin]
+# JWT is validated inside the function (Bearer + auth.getUser). Disables gateway duplicate check that caused 401 Invalid JWT for valid sessions.
+verify_jwt = false

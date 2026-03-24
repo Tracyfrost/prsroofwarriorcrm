@@ -1,25 +1,68 @@
-# PRS Roof Warrior CRM
+# Warrior Command / PRS CRM
 
-Vite + React + Supabase app. The **application root** (where `package.json` and `vite.config.ts` live) is the **`prsroofwarriorcrm-main`** subdirectory of this repository.
+Warrior Command CRM is a Vite + React + Supabase web application used to manage roofing jobs, customers, production, and financials.
 
-## Vercel
+## Tech stack
 
-1. Import this GitHub repo in [Vercel](https://vercel.com) → **Add New Project**.
-2. Set **Root Directory** to: `prsroofwarriorcrm-main`
-3. Framework: Vite (auto). Build: `npm run build` · Output: `dist`
-4. Add **Environment Variables** (Production & Preview):
+- Vite + React + TypeScript  
+- shadcn-ui + Tailwind CSS  
+- Supabase (Postgres, Auth, Storage)  
+- TanStack Query for data fetching/caching
 
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_PUBLISHABLE_KEY`
-   - `VITE_SUPABASE_PROJECT_ID` (if used)
+## Getting started (local dev)
 
-   Use the same values as local `.env.local`.
+1. **Install Node.js** (18+ recommended).
+2. Install dependencies:
 
-5. Deploy. `vercel.json` in the app folder enables client-side routing (SPA).
+   ```sh
+   npm install
+   # or
+   yarn
+   ```
 
-## Supabase (not deployed by Vercel)
+3. Create `.env.local` in the project root and configure your Supabase keys and URLs (copy from your Supabase project; all Vite vars must be prefixed with `VITE_`).
 
-- Run migrations: `supabase db push` (from machine with CLI linked to project).
-- Deploy Edge Function: `npm run deploy:user-admin` from `prsroofwarriorcrm-main` (requires Supabase CLI).
+4. Start the dev server:
 
-See `prsroofwarriorcrm-main/docs/SUPABASE_SETUP.md` for details.
+   ```sh
+   npm run dev
+   # or
+   yarn dev
+   ```
+
+5. Open the app in your browser at `http://localhost:8080/`.
+
+## Scripts
+
+- `npm run dev` / `yarn dev` – start the Vite dev server  
+- `npm run build` / `yarn build` – create a production build  
+- `npm run preview` / `yarn preview` – preview the production build locally  
+- `npm run lint` – run ESLint  
+- `npm run test` – run Vitest tests
+
+## Deployment
+
+You can deploy the built app to any static hosting that supports Vite builds, such as:
+
+- Vercel  
+- Netlify  
+- Render  
+- Static hosting behind Nginx/Apache
+
+Typical steps:
+
+1. Set your environment variables in the hosting platform (matching `.env.local` but using their UI).
+2. Build:
+
+   ```sh
+   npm run build
+   ```
+
+3. Point your host to the `dist` directory as the build output.
+
+## Customization
+
+- **Branding & colors**: managed via the in-app Settings → Branding screen (white-label config stored in Supabase).  
+- **Status/production config**: managed via Settings → Customizations / Production tabs.
+
+For deeper code changes, open the project in your preferred IDE and edit the TypeScript/React files under `src/`.*** End Patch```} ***!

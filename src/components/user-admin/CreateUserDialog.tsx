@@ -16,23 +16,20 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Progress } from "@/components/ui/progress";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { LEVEL_CONFIG, LEVELS, type ProfileWithHierarchy } from "@/hooks/useHierarchy";
+import { roleMapping, type DbRole, type UiRole, uiToDbRole } from "@/lib/role-utils";
 
-const ROLES = ["sales_rep", "field_tech", "office_admin", "manager", "owner"] as const;
-
-const ROLE_DEFAULT_LEVEL: Record<string, keyof typeof LEVEL_CONFIG> = {
-  sales_rep: "lvl2",
-  field_tech: "lvl1",
-  office_admin: "admin",
+const ROLE_DEFAULT_LEVEL: Record<UiRole, keyof typeof LEVEL_CONFIG> = {
+  sales: "lvl2",
+  office: "admin",
   manager: "manager",
-  owner: "highest",
+  admin: "highest",
 };
 
-const ROLE_HINT: Record<string, string> = {
-  sales_rep: "Defaults to Rep tier (lvl2). Adjust level and commission if needed.",
-  field_tech: "Defaults to canvasser / field tier.",
-  office_admin: "Defaults to Admin tier.",
+const ROLE_HINT: Record<UiRole, string> = {
+  sales: "Defaults to Rep tier (lvl2). Adjust level and commission if needed.",
+  office: "Defaults to Admin tier.",
   manager: "Defaults to Manager tier.",
-  owner: "Defaults to Owner — grant only when appropriate.",
+  admin: "Defaults to Owner tier.",
 };
 
 export type CreateUserPayload = {
@@ -40,7 +37,7 @@ export type CreateUserPayload = {
   email: string;
   password: string;
   full_name: string;
-  role: string;
+  role: DbRole;
   must_change_password: boolean;
   phone?: string | null;
   phone_secondary?: string | null;
@@ -97,7 +94,7 @@ type Props = {
 export function CreateUserDialog({ open, onOpenChange, users, isPending, onSubmit }: Props) {
   const [createName, setCreateName] = useState("");
   const [createEmail, setCreateEmail] = useState("");
-  const [createRole, setCreateRole] = useState<string>("sales_rep");
+  const [createRole, setCreateRole] = useState<UiRole>("sales");
   const [createPassword, setCreatePassword] = useState("");
   const [createMustChange, setCreateMustChange] = useState(true);
   const [optionalOpen, setOptionalOpen] = useState(false);
@@ -154,7 +151,7 @@ export function CreateUserDialog({ open, onOpenChange, users, isPending, onSubmi
   const reset = () => {
     setCreateName("");
     setCreateEmail("");
-    setCreateRole("sales_rep");
+    setCreateRole("sales");
     setCreatePassword("");
     setCreateMustChange(true);
     setOptionalOpen(false);
@@ -183,7 +180,7 @@ export function CreateUserDialog({ open, onOpenChange, users, isPending, onSubmi
       email: createEmail.trim(),
       password: createPassword,
       full_name: createName.trim(),
-      role: createRole,
+      role: uiToDbRole(createRole),
       must_change_password: createMustChange,
       level: createLevel,
       commission_rate: parseFloat(createCommRate) || 0,
@@ -212,7 +209,7 @@ export function CreateUserDialog({ open, onOpenChange, users, isPending, onSubmi
       email: createEmail.trim(),
       password: createPassword,
       full_name: createName.trim(),
-      role: createRole,
+      role: uiToDbRole(createRole),
       must_change_password: createMustChange,
       level: createLevel,
       commission_rate: parseFloat(createCommRate) || 0,
@@ -263,14 +260,14 @@ export function CreateUserDialog({ open, onOpenChange, users, isPending, onSubmi
           </div>
           <div className="space-y-2">
             <Label>Role</Label>
-            <Select value={createRole} onValueChange={setCreateRole}>
+            <Select value={createRole} onValueChange={(value) => setCreateRole(value as UiRole)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {ROLES.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {r.replace("_", " ")}
+                {(Object.keys(roleMapping) as UiRole[]).map((role) => (
+                  <SelectItem key={role} value={role}>
+                    {roleMapping[role].label}
                   </SelectItem>
                 ))}
               </SelectContent>

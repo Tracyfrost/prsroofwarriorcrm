@@ -65,8 +65,8 @@ const CreateUserSchema = z.object({
   action: z.literal("create-user"),
   email: z.string().email().max(255),
   password: z.string().min(8).max(128),
-  full_name: z.string().trim().max(100).optional().default(""),
-  role: z.enum(["sales_rep", "field_tech", "office_admin", "manager", "owner"]).optional(),
+  full_name: z.string().trim().min(1).max(100),
+  role: z.enum(["sales_rep", "field_tech", "office_admin", "manager", "owner"]),
   must_change_password: z.boolean().default(true),
   phone: z.string().max(30).optional().nullable(),
   phone_secondary: z.string().max(30).optional().nullable(),
@@ -296,7 +296,7 @@ serve(async (req) => {
           entity_id: newAuthId,
           details: {
             email,
-            role: role ?? null,
+            role,
             performed_by: caller.email,
             optional_fields: {
               has_phone: Boolean(phone),

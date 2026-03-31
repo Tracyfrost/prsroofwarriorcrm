@@ -31,8 +31,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatDistanceToNow } from "date-fns";
 import { formatUserAdminHttpError } from "@/lib/userAdminInvokeError";
 import { CreateUserDialog, type CreateUserPayload } from "@/components/user-admin/CreateUserDialog";
+import { dbToUiRole, roleMapping, type UiRole } from "@/lib/role-utils";
 
-const ROLES = ["sales_rep", "field_tech", "office_admin", "manager", "owner"] as const;
 const USER_ADMIN_FUNCTION = "user-admin";
 
 const getInvokeErrorMessage = async (error: unknown) => {
@@ -563,8 +563,8 @@ export function UserAdminTable({ users, isLoading }: UserAdminTableProps) {
                             <SelectValue placeholder="Assign" />
                           </SelectTrigger>
                           <SelectContent>
-                            {ROLES.map((r) => (
-                              <SelectItem key={r} value={r}>{r.replace("_", " ")}</SelectItem>
+                            {(Object.keys(roleMapping) as UiRole[]).map((role) => (
+                              <SelectItem key={role} value={roleMapping[role].db}>{roleMapping[role].label}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -700,13 +700,20 @@ export function UserAdminTable({ users, isLoading }: UserAdminTableProps) {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Role</span>
-                <span className="font-medium">{createdUser?.role?.replace("_", " ")}</span>
+                <span className="font-medium">{dbToUiRole(createdUser?.role ?? "")}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground">Temp Password</span>
                 <div className="flex items-center gap-2">
                   <code className="rounded bg-background px-2 py-0.5 text-sm font-mono">{createdUser?.password}</code>
-                  <Button variant="ghost" size="sm" onClick={handleCopyPassword} className="h-7 px-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCopyPassword}
+                    className="h-7 px-2"
+                    aria-label="Copy temporary password"
+                    title="Copy temporary password"
+                  >
                     {copied ? <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> : <Copy className="h-3.5 w-3.5" />}
                   </Button>
                 </div>

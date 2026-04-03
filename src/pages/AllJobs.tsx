@@ -111,7 +111,7 @@ export default function AllJobs() {
                     {filtered.map((j: any) => (
                       <tr key={j.id} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
                         <td className="px-4 py-3">
-                          <Link to={`/jobs/${j.id}`} className="font-medium text-foreground hover:text-accent transition-colors">{j.job_id}</Link>
+                          <Link to={`/operations/${j.id}`} className="font-medium text-foreground hover:text-accent transition-colors">{j.job_id}</Link>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">{j.customers?.name || "—"}</td>
                         <td className="px-4 py-3 hidden sm:table-cell">

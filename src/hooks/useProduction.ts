@@ -12,6 +12,19 @@ export type TradeType = {
   sort_order: number;
 };
 
+/** Multi-crew line assignment; stored as JSONB on job_production_items.crew_assigned */
+export type CrewAssignment = { user_id: string; role: string };
+
+export type ProductionScopeMetadata = {
+  shingle_manufacturer?: string;
+  shingle_color?: string;
+  shingle_style?: string;
+  drip_edge_color?: string;
+  pitch?: string;
+  layers?: string;
+  [key: string]: unknown;
+};
+
 export type ProductionItem = {
   id: string;
   job_id: string;
@@ -31,11 +44,43 @@ export type ProductionItem = {
   dependencies: string;
   created_at: string;
   updated_at: string;
+  qualification_status: string;
+  estimate_per_sq: number | null;
+  pre_draw_amount: number | null;
+  recoverable_depreciation: number | null;
+  material_order_status: string;
+  delivery_date: string | null;
+  drop_location: string | null;
+  crew_assigned: CrewAssignment[] | unknown;
+  sol_notes: string | null;
+  scope_metadata: ProductionScopeMetadata | unknown;
   // Joined fields
   trade_types?: { name: string; unit_type: string } | null;
   jobs?: { job_id: string; customer_id: string; customers?: { name: string; main_address: any } | null } | null;
   profiles?: { name: string } | null;
 };
+
+export function parseCrewAssigned(raw: ProductionItem["crew_assigned"]): CrewAssignment[] {
+  if (!raw || !Array.isArray(raw)) return [];
+  return (raw as CrewAssignment[]).filter((c) => c && typeof c.user_id === "string");
+}
+
+export function parseScopeMetadata(raw: ProductionItem["scope_metadata"]): ProductionScopeMetadata {
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) return raw as ProductionScopeMetadata;
+  return {};
+}
+
+function normalizeProductionRow(row: ProductionItem): ProductionItem {
+  return {
+    ...row,
+    qualification_status: row.qualification_status ?? "Pending",
+    material_order_status: row.material_order_status ?? "Not Ordered",
+    crew_assigned: row.crew_assigned ?? [],
+    scope_metadata: row.scope_metadata ?? {},
+    drop_location: row.drop_location ?? "",
+    sol_notes: row.sol_notes ?? "",
+  };
+}
 
 export function useTradeTypes() {
   return useQuery({
@@ -113,7 +158,7 @@ export function useProductionItems(jobId?: string) {
         .eq("job_id", jobId!)
         .order("created_at");
       if (error) throw error;
-      return (data ?? []) as ProductionItem[];
+      return ((data ?? []) as ProductionItem[]).map(normalizeProductionRow);
     },
   });
 }
@@ -127,7 +172,7 @@ export function useAllProductionItems() {
         .select("*, trade_types(name, unit_type), jobs(job_id, customer_id, status, customers(name, main_address))")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as ProductionItem[];
+      return ((data ?? []) as ProductionItem[]).map(normalizeProductionRow);
     },
   });
 }
@@ -143,11 +188,12 @@ export function useCreateProductionItem() {
         .select("*, trade_types(name, unit_type)")
         .single();
       if (error) throw error;
-      return data;
+      return normalizeProductionRow(data as ProductionItem);
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["production-items", data.job_id] });
       qc.invalidateQueries({ queryKey: ["all-production-items"] });
+      qc.invalidateQueries({ queryKey: ["main-financials-production-lines"] });
     },
   });
 }
@@ -164,11 +210,35 @@ export function useUpdateProductionItem() {
         .select("*, trade_types(name, unit_type)")
         .single();
       if (error) throw error;
-      return data;
+      return normalizeProductionRow(data as ProductionItem);
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["production-items", data.job_id] });
       qc.invalidateQueries({ queryKey: ["all-production-items"] });
+      qc.invalidateQueries({ queryKey: ["main-financials-production-lines"] });
+    },
+  });
+}
+
+export function useDeleteProductionItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await supabase
+        .from("job_production_items")
+        .delete()
+        .eq("id", id)
+        .select("job_id")
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data?.job_id) {
+        qc.invalidateQueries({ queryKey: ["production-items", data.job_id] });
+      }
+      qc.invalidateQueries({ queryKey: ["all-production-items"] });
+      qc.invalidateQueries({ queryKey: ["main-financials-production-lines"] });
     },
   });
 }

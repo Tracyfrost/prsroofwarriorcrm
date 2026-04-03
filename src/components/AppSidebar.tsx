@@ -49,6 +49,13 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
   const { can } = usePermissions();
   const levelConfig = LEVEL_CONFIG[myProfile?.level ?? "lvl1"] || LEVEL_CONFIG.lvl1;
   const tier = subscription?.tier ?? "free";
+  const isActive = (to: string) => {
+    if (to === "/operations" || to === "/jobs") return location.pathname.startsWith("/operations/") || location.pathname.startsWith("/jobs");
+    if (to === "/production") return location.pathname === "/production";
+    if (to === "/users/me") return location.pathname === "/users/me" || location.pathname === `/users/${user?.id}`;
+    if (to === "/") return location.pathname === "/";
+    return location.pathname.startsWith(to);
+  };
 
   return (
     <aside
@@ -88,10 +95,7 @@ export function AppSidebar({ open, onClose }: AppSidebarProps) {
       {/* Nav */}
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
         {navItems.map((item) => {
-          const active =
-            location.pathname === item.to ||
-            (item.to !== "/" && item.to !== "/users/me" && location.pathname.startsWith(item.to + "/")) ||
-            (item.to === "/users/me" && (location.pathname === "/users/me" || location.pathname === `/users/${user?.id}`));
+          const active = isActive(item.to);
           const locked = item.requiredPerm ? !can(item.requiredPerm) : false;
 
           if (locked) {

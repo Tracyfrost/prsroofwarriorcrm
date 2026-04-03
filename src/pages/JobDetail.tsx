@@ -329,7 +329,7 @@ export default function JobDetail() {
           {isSubJob && parentJobId && (
             <BattleTooltip phraseKey="back_to_main_job">
               <div className="mb-2">
-                <Link to={`/jobs/${parentJobId}`} className="text-xs text-accent hover:underline">
+                <Link to={`/operations/${parentJobId}`} className="text-xs text-accent hover:underline">
                   ← Back to Main Job
                 </Link>
               </div>
@@ -349,7 +349,7 @@ export default function JobDetail() {
                       variant="default"
                       size="xs"
                       className="h-7 px-2 text-[11px] font-mono"
-                      onClick={() => navigate(`/jobs/${job.id}`)}
+                      onClick={() => navigate(`/operations/${job.id}`)}
                     >
                       Main · {job.job_id}
                     </Button>
@@ -360,7 +360,7 @@ export default function JobDetail() {
                         variant="outline"
                         size="xs"
                         className="h-7 px-2 text-[11px] font-mono"
-                        onClick={() => navigate(`/jobs/${sub.id}`)}
+                        onClick={() => navigate(`/operations/${sub.id}`)}
                       >
                         Sub · {sub.job_id}
                       </Button>
@@ -638,7 +638,7 @@ export default function JobDetail() {
                       </thead>
                       <tbody>
                         {subJobsList.map((sub: any) => (
-                          <tr key={sub.id} className="border-b cursor-pointer hover:bg-muted/40" onClick={() => navigate(`/jobs/${sub.id}`)}>
+                          <tr key={sub.id} className="border-b cursor-pointer hover:bg-muted/40" onClick={() => navigate(`/operations/${sub.id}`)}>
                             <td className="px-4 py-2 font-mono font-medium text-foreground">{sub.job_id}</td>
                             <td className="px-4 py-2">
                               <div className="flex gap-1">{sub.trade_types?.map((t: string) => <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>)}</div>
@@ -688,9 +688,11 @@ export default function JobDetail() {
           <div className="lg:col-span-3">
             <ProductionSection
               jobId={job.id}
+              jobDisplayId={(job as any).job_id}
               milestones={(job as any).production_milestones ?? {}}
               qualification={((job as any).qualification ?? {}) as Qualification}
               numberOfSquares={getSquaresReported(job as any)}
+              numberOfSquaresRaw={(job as any).number_of_squares ?? null}
               squaresEstimated={(job as any).squares_estimated ?? null}
               squaresActualInstalled={(job as any).squares_actual_installed ?? null}
               squaresFinal={(job as any).squares_final ?? null}
@@ -800,9 +802,11 @@ export default function JobDetail() {
             <TabsContent value="production" className="mt-4">
                <ProductionSection
                 jobId={job.id}
+                jobDisplayId={(job as any).job_id}
                 milestones={(job as any).production_milestones ?? {}}
                 qualification={((job as any).qualification ?? {}) as Qualification}
                 numberOfSquares={getSquaresReported(job as any)}
+                numberOfSquaresRaw={(job as any).number_of_squares ?? null}
                 squaresEstimated={(job as any).squares_estimated ?? null}
                 squaresActualInstalled={(job as any).squares_actual_installed ?? null}
                 squaresFinal={(job as any).squares_final ?? null}

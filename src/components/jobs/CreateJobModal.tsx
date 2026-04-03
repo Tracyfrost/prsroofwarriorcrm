@@ -143,7 +143,7 @@ export function CreateJobModal({ defaultCustomerId, defaultParentJobId, trigger 
       toast({ title: creatingSubJob ? "Sub Job created" : "Job created successfully" });
       setOpen(false);
       form.reset();
-      navigate(`/jobs/${result.id}`);
+      navigate(`/operations/${result.id}`);
     } catch (e: any) {
       toast({
         title: "Failed to create job",

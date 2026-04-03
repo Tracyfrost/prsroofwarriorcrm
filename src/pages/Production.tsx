@@ -29,6 +29,10 @@ export default function Production() {
   const [assigneeFilter, setAssigneeFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [gateFilter, setGateFilter] = useState("all");
+  const [materialFilter, setMaterialFilter] = useState("all");
+  const [deliveryFrom, setDeliveryFrom] = useState("");
+  const [deliveryTo, setDeliveryTo] = useState("");
   const { data: items = [], isLoading } = useAllProductionItems();
   const { data: tradeTypes = [] } = useTradeTypes();
   const { data: profiles = [] } = useAllProfiles();
@@ -53,7 +57,24 @@ export default function Production() {
     const matchAssignee = assigneeFilter === "all" || i.assigned_to_user_id === assigneeFilter;
     const matchDateFrom = !dateFrom || (i.scheduled_start_date && i.scheduled_start_date >= dateFrom);
     const matchDateTo = !dateTo || (i.scheduled_start_date && i.scheduled_start_date <= dateTo);
-    return matchSearch && matchStatus && matchTrade && matchAssignee && matchDateFrom && matchDateTo;
+    const matchGate = gateFilter === "all" || (i.qualification_status || "Pending") === gateFilter;
+    const matchMaterial =
+      materialFilter === "all" || (i.material_order_status || "Not Ordered") === materialFilter;
+    const delDay = i.delivery_date ? i.delivery_date.split("T")[0] : "";
+    const matchDelFrom = !deliveryFrom || (delDay && delDay >= deliveryFrom);
+    const matchDelTo = !deliveryTo || (delDay && delDay <= deliveryTo);
+    return (
+      matchSearch &&
+      matchStatus &&
+      matchTrade &&
+      matchAssignee &&
+      matchDateFrom &&
+      matchDateTo &&
+      matchGate &&
+      matchMaterial &&
+      matchDelFrom &&
+      matchDelTo
+    );
   });
 
   const handleStatusChange = async (item: ProductionItem, newStatus: string) => {
@@ -123,7 +144,22 @@ export default function Production() {
   };
 
   const exportCsv = () => {
-    const headers = ["Job ID", "Customer", "Trade", "Qty", "Unit", "Labor", "Material", "Total", "Status", "Scheduled"];
+    const headers = [
+      "Job ID",
+      "Customer",
+      "Trade",
+      "Qty",
+      "Unit",
+      "Labor",
+      "Material",
+      "Total",
+      "Status",
+      "Scheduled",
+      "QualificationGate",
+      "MaterialOrder",
+      "DeliveryDate",
+      "DropLocation",
+    ];
     const rows = filtered.map((i) => [
       i.jobs?.job_id || "",
       i.jobs?.customers?.name || "",
@@ -135,6 +171,10 @@ export default function Production() {
       i.labor_cost + i.material_cost,
       productionStatuses.find((s) => s.name === i.status)?.display_name || i.status,
       i.scheduled_start_date || "",
+      i.qualification_status || "",
+      i.material_order_status || "",
+      i.delivery_date ? i.delivery_date.split("T")[0] : "",
+      (i.drop_location || "").replace(/\n/g, " "),
     ]);
     const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -152,9 +192,23 @@ export default function Production() {
     setAssigneeFilter("all");
     setDateFrom("");
     setDateTo("");
+    setGateFilter("all");
+    setMaterialFilter("all");
+    setDeliveryFrom("");
+    setDeliveryTo("");
   };
 
-  const hasFilters = search || statusFilter !== "all" || tradeFilter !== "all" || assigneeFilter !== "all" || dateFrom || dateTo;
+  const hasFilters =
+    search ||
+    statusFilter !== "all" ||
+    tradeFilter !== "all" ||
+    assigneeFilter !== "all" ||
+    dateFrom ||
+    dateTo ||
+    gateFilter !== "all" ||
+    materialFilter !== "all" ||
+    deliveryFrom ||
+    deliveryTo;
 
   return (
     <AppLayout>
@@ -205,6 +259,25 @@ export default function Production() {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={gateFilter} onValueChange={setGateFilter}>
+              <SelectTrigger className="w-36"><SelectValue placeholder="Gate" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All gates</SelectItem>
+                <SelectItem value="Pending">Pending</SelectItem>
+                <SelectItem value="Go">Go</SelectItem>
+                <SelectItem value="Hold">Hold</SelectItem>
+                <SelectItem value="Supplement">Supplement</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={materialFilter} onValueChange={setMaterialFilter}>
+              <SelectTrigger className="w-40"><SelectValue placeholder="Materials" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All material states</SelectItem>
+                <SelectItem value="Not Ordered">Not Ordered</SelectItem>
+                <SelectItem value="Ordered">Ordered</SelectItem>
+                <SelectItem value="Delivered">Delivered</SelectItem>
+              </SelectContent>
+            </Select>
             <div className="flex border rounded-lg overflow-hidden">
               <BattleTooltip phraseKey="view_board_production">
                 <button
@@ -233,6 +306,14 @@ export default function Production() {
             <div className="flex items-center gap-2">
               <Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label>
               <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 w-36 text-xs" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-xs text-muted-foreground whitespace-nowrap">Delivery from</Label>
+              <Input type="date" value={deliveryFrom} onChange={(e) => setDeliveryFrom(e.target.value)} className="h-9 w-36 text-xs" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-xs text-muted-foreground whitespace-nowrap">Delivery to</Label>
+              <Input type="date" value={deliveryTo} onChange={(e) => setDeliveryTo(e.target.value)} className="h-9 w-36 text-xs" />
             </div>
             {hasFilters && (
               <Button variant="ghost" size="sm" className="text-xs h-8" onClick={clearFilters}>
@@ -302,7 +383,7 @@ export default function Production() {
                   <Button onClick={saveDetail} className="flex-1" disabled={updateItem.isPending}>
                     {updateItem.isPending ? "Saving..." : "Save Changes"}
                   </Button>
-                  <Button variant="outline" onClick={() => navigate(`/jobs/${selectedItem.job_id}`)}>
+                  <Button variant="outline" onClick={() => navigate(`/operations/${selectedItem.job_id}`)}>
                     View Job
                   </Button>
                 </div>

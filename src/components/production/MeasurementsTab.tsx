@@ -107,6 +107,10 @@ export function MeasurementsTab({
 
   return (
     <div className="space-y-4">
+      <p className="rounded-lg border border-dashed bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        Job-level roof squares live here. Per-line quantities, pitch, and shingle details are edited in the{" "}
+        <span className="font-medium text-foreground">War Room</span> tab on each production line.
+      </p>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="shadow-card">
           <CardHeader>

@@ -3,6 +3,8 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 
+// Phase 2 (Production War Room): optional production_item_id on site_cam media for per-line tagging.
+
 export interface SiteCamMedia {
   id: string;
   job_id: string;

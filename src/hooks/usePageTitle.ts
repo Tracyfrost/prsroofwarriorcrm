@@ -6,6 +6,7 @@ const ROUTE_TITLE_PATTERNS: { pattern: RegExp; label: (match: RegExpMatchArray) 
   { pattern: /^\/$/, label: () => "Dashboard" },
   { pattern: /^\/jobs$/, label: () => "Jobs" },
   { pattern: /^\/jobs\/([^/]+)$/, label: (m) => `Job ${m[1]}` },
+  { pattern: /^\/operations\/([^/]+)$/, label: (m) => `Operations ${m[1]}` },
   { pattern: /^\/customers$/, label: () => "Customers" },
   { pattern: /^\/customers\/([^/]+)$/, label: () => "Customer Detail" },
   { pattern: /^\/appointments/, label: () => "Appointments" },

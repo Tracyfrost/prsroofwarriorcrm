@@ -12,6 +12,7 @@ import ChangePassword from "./pages/ChangePassword";
 import Customers from "./pages/Customers";
 import Jobs from "./pages/Jobs";
 import JobDetail from "./pages/JobDetail";
+import Operations from "./pages/Operations";
 import Appointments from "./pages/Appointments";
 import Commissions from "./pages/Commissions";
 import Reports from "./pages/Reports";
@@ -89,6 +90,7 @@ const App = () => (
             <Route path="/customers/:id" element={<ProtectedRoute><CustomerDetail /></ProtectedRoute>} />
             <Route path="/jobs" element={<ProtectedRoute><Jobs /></ProtectedRoute>} />
             <Route path="/jobs/:id" element={<ProtectedRoute><JobDetail /></ProtectedRoute>} />
+            <Route path="/operations/:id" element={<ProtectedRoute><Operations /></ProtectedRoute>} />
             <Route path="/appointments" element={<ProtectedRoute><Appointments /></ProtectedRoute>} />
             <Route path="/commissions" element={<ProtectedRoute><Commissions /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />

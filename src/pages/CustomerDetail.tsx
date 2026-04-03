@@ -687,7 +687,7 @@ export default function CustomerDetail() {
                             const subs = subsByParent[j.id] || [];
                             return (
                               <>{/* Main job row */}
-                                <TableRow key={j.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/jobs/${j.id}`)}>
+                                <TableRow key={j.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/operations/${j.id}`)}>
                                   <TableCell className="font-medium font-mono">
                                     {j.job_id}
                                     {subs.length > 0 && <Badge variant="outline" className="ml-2 text-[9px]">{subs.length} sub{subs.length !== 1 ? "s" : ""}</Badge>}
@@ -710,7 +710,7 @@ export default function CustomerDetail() {
                                   <TableCell className="text-right text-sm">${j.checksReceived.toLocaleString()}</TableCell>
                                 </TableRow>
                                 {subs.map((sub) => (
-                                  <TableRow key={sub.id} className="cursor-pointer hover:bg-muted/50 bg-muted/20" onClick={() => navigate(`/jobs/${sub.id}`)}>
+                                  <TableRow key={sub.id} className="cursor-pointer hover:bg-muted/50 bg-muted/20" onClick={() => navigate(`/operations/${sub.id}`)}>
                                     <TableCell className="font-mono text-sm pl-8 text-muted-foreground">↳ {sub.job_id}</TableCell>
                                     <TableCell className="text-xs text-muted-foreground">sub #{(sub as any).sub_number}</TableCell>
                                     <TableCell>
@@ -767,7 +767,7 @@ export default function CustomerDetail() {
                       </TableRow>
                     ) : (
                       appointments.map((a: any) => (
-                        <TableRow key={a.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/jobs/${a.job_id}`)}>
+                        <TableRow key={a.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/operations/${a.job_id}`)}>
                           <TableCell className="text-sm">{format(new Date(a.date_time), "MMM d, yyyy h:mm a")}</TableCell>
                           <TableCell className="text-sm font-medium">{a.jobs?.job_id || "—"}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{a.outcome || "—"}</TableCell>

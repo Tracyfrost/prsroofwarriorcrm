@@ -1,3 +1,4 @@
+import { useState, useMemo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MilestonesTab } from "@/components/production/MilestonesTab";
 import { MeasurementsTab } from "@/components/production/MeasurementsTab";
@@ -13,14 +14,19 @@ import { useJobExpenses } from "@/hooks/useJobExpenses";
 import { useDraws } from "@/hooks/useDraws";
 import type { Qualification } from "@/hooks/useJobProduction";
 import type { JobTracking } from "@/hooks/useJobTracking";
+import type { PlanningJobSquares } from "@/lib/roofSquares";
 import { Clock, Ruler, ShieldCheck, BarChart3, Hammer, FileSpreadsheet, Shield, ScrollText, DollarSign } from "lucide-react";
 import { JobLogsTab } from "@/components/production/JobLogsTab";
 
 interface Props {
   jobId: string;
+  /** Human-readable job id for CSV export labels */
+  jobDisplayId?: string;
   milestones: Record<string, string | null>;
   qualification: Qualification;
   numberOfSquares: number;
+  /** Raw `jobs.number_of_squares` for planning SQ fallback */
+  numberOfSquaresRaw?: number | null;
   squaresEstimated?: number | null;
   squaresActualInstalled?: number | null;
   squaresFinal?: number | null;
@@ -32,14 +38,31 @@ interface Props {
   carrierFromCustomer?: string | null;
 }
 
-export function ProductionSection({ jobId, milestones, qualification, numberOfSquares, squaresEstimated, squaresActualInstalled, squaresFinal, assignments, profileMap, tracking, isMainJob = true, parentClaimNumber, carrierFromCustomer }: Props) {
+export function ProductionSection({ jobId, jobDisplayId, milestones, qualification, numberOfSquares, numberOfSquaresRaw, squaresEstimated, squaresActualInstalled, squaresFinal, assignments, profileMap, tracking, isMainJob = true, parentClaimNumber, carrierFromCustomer }: Props) {
+  const planningJobSquares: PlanningJobSquares = useMemo(
+    () => ({
+      squares_estimated: squaresEstimated ?? null,
+      squares_actual_installed: squaresActualInstalled ?? null,
+      squares_final: squaresFinal ?? null,
+      number_of_squares: numberOfSquaresRaw ?? null,
+    }),
+    [squaresEstimated, squaresActualInstalled, squaresFinal, numberOfSquaresRaw],
+  );
+
   const { data: productionItems = [] } = useProductionItems(jobId);
   const { data: checks = [] } = usePaymentChecks(jobId);
   const { data: itemizedExpenses = [] } = useJobExpenses(jobId);
   const { data: draws = [] } = useDraws(jobId);
+  const [prodTab, setProdTab] = useState("overview");
+
+  const receivedChecksTotal = useMemo(
+    () =>
+      checks.filter((c) => c.status === "Received" || c.status === "Deposited").reduce((s, c) => s + (Number(c.amount) || 0), 0),
+    [checks],
+  );
 
   return (
-    <Tabs defaultValue="overview" className="w-full">
+    <Tabs value={prodTab} onValueChange={setProdTab} className="w-full">
       <TabsList className="w-full flex-wrap h-auto gap-1 px-1 pt-2 pb-1 overflow-x-auto bg-[var(--wc-surface-2)] border-t border-[var(--wc-border)] rounded-none">
         <TabsTrigger
           value="overview"
@@ -48,16 +71,16 @@ export function ProductionSection({ jobId, milestones, qualification, numberOfSq
           <BarChart3 className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> Overview
         </TabsTrigger>
         <TabsTrigger
+          value="war-room"
+          className="flex items-center gap-1.5 text-xs min-h-[48px] sm:min-h-0 px-3 py-2 border-b-2 border-transparent text-[var(--wc-muted)] data-[state=active]:text-[var(--wc-ink)] data-[state=active]:border-b-[var(--wc-amber)] data-[state=active]:bg-transparent hover:text-[var(--wc-ink)] hover:bg-[var(--wc-surface-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
+        >
+          <Hammer className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> War Room
+        </TabsTrigger>
+        <TabsTrigger
           value="milestones"
           className="flex items-center gap-1.5 text-xs min-h-[48px] sm:min-h-0 px-3 py-2 border-b-2 border-transparent text-[var(--wc-muted)] data-[state=active]:text-[var(--wc-ink)] data-[state=active]:border-b-[var(--wc-amber)] data-[state=active]:bg-transparent hover:text-[var(--wc-ink)] hover:bg-[var(--wc-surface-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
         >
           <Clock className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> Milestones
-        </TabsTrigger>
-        <TabsTrigger
-          value="items"
-          className="flex items-center gap-1.5 text-xs min-h-[48px] sm:min-h-0 px-3 py-2 border-b-2 border-transparent text-[var(--wc-muted)] data-[state=active]:text-[var(--wc-ink)] data-[state=active]:border-b-[var(--wc-amber)] data-[state=active]:bg-transparent hover:text-[var(--wc-ink)] hover:bg-[var(--wc-surface-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
-        >
-          <Hammer className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> Items
         </TabsTrigger>
         <TabsTrigger
           value="measurements"
@@ -112,12 +135,12 @@ export function ProductionSection({ jobId, milestones, qualification, numberOfSq
         />
       </TabsContent>
 
-      <TabsContent value="milestones" className="mt-4">
-        <MilestonesTab jobId={jobId} milestones={milestones} />
+      <TabsContent value="war-room" className="mt-4">
+        <ProductionItemsTab jobId={jobId} />
       </TabsContent>
 
-      <TabsContent value="items" className="mt-4">
-        <ProductionItemsTab jobId={jobId} />
+      <TabsContent value="milestones" className="mt-4">
+        <MilestonesTab jobId={jobId} milestones={milestones} />
       </TabsContent>
 
       <TabsContent value="measurements" className="mt-4">
@@ -131,7 +154,16 @@ export function ProductionSection({ jobId, milestones, qualification, numberOfSq
       </TabsContent>
 
       <TabsContent value="qualification" className="mt-4">
-        <QualificationTab jobId={jobId} qualification={qualification} numberOfSquares={numberOfSquares} />
+        <QualificationTab
+          jobId={jobId}
+          jobDisplayId={jobDisplayId}
+          qualification={qualification}
+          planningJobSquares={planningJobSquares}
+          productionItems={productionItems}
+          draws={draws}
+          receivedChecksTotal={receivedChecksTotal}
+          onNavigateWarRoom={() => setProdTab("war-room")}
+        />
       </TabsContent>
 
       <TabsContent value="tracking" className="mt-4">

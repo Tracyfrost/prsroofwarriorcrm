@@ -50,6 +50,12 @@ export default function ManagerDashboard() {
   // Bottlenecks
   const onHold = productionItems.filter((i) => i.status === "on_hold").length;
   const draftItems = productionItems.filter((i) => i.status === "draft").length;
+  const gateHoldLines = productionItems.filter((i) => i.qualification_status === "Hold").length;
+  const activeNeedingMaterial = productionItems.filter(
+    (i) =>
+      ["ready", "scheduled", "in_progress"].includes(i.status) &&
+      (i.material_order_status || "Not Ordered") !== "Delivered",
+  ).length;
 
   // Production margin snapshot
   const totalRevenue = jobs.reduce((s, j) => s + ((j.financials as any)?.acv ?? 0), 0);
@@ -184,6 +190,14 @@ export default function ManagerDashboard() {
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-muted-foreground">Draft (not started)</span>
                   <Badge variant={draftItems > 3 ? "destructive" : "outline"}>{draftItems}</Badge>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Line gate: Hold</span>
+                  <Badge variant={gateHoldLines > 0 ? "destructive" : "outline"}>{gateHoldLines}</Badge>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Active — material not delivered</span>
+                  <Badge variant={activeNeedingMaterial > 5 ? "destructive" : "outline"}>{activeNeedingMaterial}</Badge>
                 </div>
               </div>
             </CardContent>

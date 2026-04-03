@@ -8,6 +8,7 @@ import { Search, ArrowLeft, DollarSign, TrendingUp, BarChart3, ChevronRight, Che
 import { Link } from "react-router-dom";
 import { useState, useMemo } from "react";
 import { TradesBadges } from "@/components/job/TradesBadges";
+import { anyLineQualificationHold, materialOrderReadinessPct } from "@/lib/productionRollups";
 
 export default function MainFinancials() {
   const [search, setSearch] = useState("");
@@ -48,6 +49,26 @@ export default function MainFinancials() {
     },
   });
 
+  const { data: productionLines = [] } = useQuery({
+    queryKey: ["main-financials-production-lines"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("job_production_items")
+        .select("job_id, labor_cost, material_cost, qualification_status, material_order_status");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const itemsByJob = useMemo(() => {
+    const m: Record<string, typeof productionLines> = {};
+    for (const p of productionLines) {
+      if (!m[p.job_id]) m[p.job_id] = [];
+      m[p.job_id].push(p);
+    }
+    return m;
+  }, [productionLines]);
+
   const subsByParent = useMemo(() => {
     const map: Record<string, any[]> = {};
     subJobs.forEach((s: any) => {
@@ -84,9 +105,30 @@ export default function MainFinancials() {
       const depreciation = totalRcv - totalAcv;
       const variance = totalAcv - totalChecks;
 
-      return { ...m, subs, totalAcv, totalRcv, totalChecks, depreciation, variance, subsCount: subs.length };
+      const plines = allJobIds.flatMap((id: string) => itemsByJob[id] || []);
+      const prodCost = plines.reduce(
+        (s: number, r: (typeof productionLines)[number]) =>
+          s + (Number(r.labor_cost) || 0) + (Number(r.material_cost) || 0),
+        0,
+      );
+      const prodMatPct = materialOrderReadinessPct(plines as any);
+      const prodLineHold = anyLineQualificationHold(plines as any);
+
+      return {
+        ...m,
+        subs,
+        totalAcv,
+        totalRcv,
+        totalChecks,
+        depreciation,
+        variance,
+        subsCount: subs.length,
+        prodCost,
+        prodMatPct,
+        prodLineHold,
+      };
     });
-  }, [mainJobs, subsByParent, checksByJob]);
+  }, [mainJobs, subsByParent, checksByJob, itemsByJob]);
 
   const totals = useMemo(() => {
     return mainJobData.reduce((acc, j) => ({
@@ -185,6 +227,8 @@ export default function MainFinancials() {
                       <th className="px-4 py-3 text-right font-medium text-muted-foreground hidden md:table-cell">Depreciation</th>
                       <th className="px-4 py-3 text-right font-medium text-muted-foreground hidden lg:table-cell">Checks</th>
                       <th className="px-4 py-3 text-right font-medium text-muted-foreground hidden lg:table-cell">Variance</th>
+                      <th className="px-4 py-3 text-right font-medium text-muted-foreground hidden md:table-cell">Prod $</th>
+                      <th className="px-4 py-3 text-center font-medium text-muted-foreground hidden lg:table-cell">Lines</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -199,7 +243,7 @@ export default function MainFinancials() {
                             )}
                           </td>
                           <td className="px-4 py-3">
-                             <Link to={`/jobs/${j.id}`} className="font-medium text-foreground hover:text-accent transition-colors font-mono">{j.job_id}</Link>
+                             <Link to={`/operations/${j.id}`} className="font-medium text-foreground hover:text-accent transition-colors font-mono">{j.job_id}</Link>
                            </td>
                            <td className="px-4 py-3"><TradesBadges trades={j.trade_types ?? []} size="xs" /></td>
                            <td className="px-4 py-3 text-muted-foreground font-mono">{j.claim_number || "—"}</td>
@@ -216,6 +260,19 @@ export default function MainFinancials() {
                               ${Math.abs(j.variance).toLocaleString()}
                             </span>
                           </td>
+                          <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground hidden md:table-cell">
+                            ${j.prodCost.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 hidden lg:table-cell">
+                            <div className="flex flex-col items-end gap-1">
+                              {j.prodLineHold && (
+                                <Badge variant="destructive" className="text-[10px]">
+                                  Hold
+                                </Badge>
+                              )}
+                              <span className="text-[10px] text-muted-foreground">Mat {j.prodMatPct}%</span>
+                            </div>
+                          </td>
                         </tr>
                         {/* Expanded sub-jobs */}
                         {expandedMain.has(j.id) && j.subs.map((sub: any) => {
@@ -226,11 +283,12 @@ export default function MainFinancials() {
                             <tr key={sub.id} className="border-b bg-muted/20 hover:bg-muted/40 transition-colors">
                               <td className="px-4 py-2"></td>
                               <td className="px-4 py-2 pl-10">
-                                <Link to={`/jobs/${sub.id}`} className="text-sm text-muted-foreground hover:text-accent transition-colors font-mono">
+                                <Link to={`/operations/${sub.id}`} className="text-sm text-muted-foreground hover:text-accent transition-colors font-mono">
                                   ↳ {sub.job_id}
                                 </Link>
                               </td>
                               <td className="px-4 py-2 text-xs text-muted-foreground">sub #{sub.sub_number}</td>
+                              <td className="px-4 py-2"></td>
                               <td className="px-4 py-2"></td>
                               <td className="px-4 py-2 hidden sm:table-cell"></td>
                               <td className="px-4 py-2 text-right font-mono text-xs text-muted-foreground">${subAcv.toLocaleString()}</td>
@@ -238,13 +296,15 @@ export default function MainFinancials() {
                               <td className="px-4 py-2 text-right font-mono text-xs text-muted-foreground hidden md:table-cell">${(subRcv - subAcv).toLocaleString()}</td>
                               <td className="px-4 py-2 text-right font-mono text-xs text-muted-foreground hidden lg:table-cell">${subChecks.toLocaleString()}</td>
                               <td className="px-4 py-2 hidden lg:table-cell"></td>
+                              <td className="px-4 py-2 hidden md:table-cell"></td>
+                              <td className="px-4 py-2 hidden lg:table-cell"></td>
                             </tr>
                           );
                         })}
                       </>
                     ))}
                     {filtered.length === 0 && (
-                      <tr><td colSpan={11} className="px-4 py-8 text-center text-muted-foreground">No main jobs found</td></tr>
+                      <tr><td colSpan={13} className="px-4 py-8 text-center text-muted-foreground">No main jobs found</td></tr>
                     )}
                   </tbody>
                   <tfoot>
@@ -257,6 +317,8 @@ export default function MainFinancials() {
                       <td className="px-4 py-3 text-right font-mono hidden lg:table-cell">
                         ${Math.abs(totals.acv - totals.checks).toLocaleString()}
                       </td>
+                      <td className="px-4 py-3 hidden md:table-cell" />
+                      <td className="px-4 py-3 hidden lg:table-cell" />
                     </tr>
                   </tfoot>
                 </table>

@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { MILESTONE_KEYS, type Qualification } from "@/hooks/useJobProduction";
 import type { PaymentCheck } from "@/hooks/usePaymentChecks";
-import type { ProductionItem } from "@/hooks/useProduction";
+import { parseScopeMetadata, type ProductionItem } from "@/hooks/useProduction";
 import type { JobExpense } from "@/hooks/useJobExpenses";
 import type { JobTracking } from "@/hooks/useJobTracking";
 import type { Draw } from "@/hooks/useDraws";
@@ -12,6 +12,13 @@ import {
   calcTotalExpenses, calcTotalBonuses, calcTotalCompanyExpenses,
   calcGrossProfit, calcCommissionProfit,
 } from "@/hooks/useJobTracking";
+import {
+  worstQualificationStatus,
+  sumLineEstimatedExposure,
+  sumPreDrawAmounts,
+  materialOrderReadinessPct,
+  anyLineQualificationHold,
+} from "@/lib/productionRollups";
 import { CHECK_TYPES } from "@/hooks/usePaymentChecks";
 import { differenceInDays, format } from "date-fns";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
@@ -109,6 +116,7 @@ export function OverviewTab({
   // Bottlenecks
   const bottlenecks: string[] = [];
   if (qualification?.status === "Underfunded") bottlenecks.push("Job is underfunded");
+  if (anyLineQualificationHold(productionItems)) bottlenecks.push("Production line gate: Hold");
   if (checks?.length === 0) bottlenecks.push("No checks received");
   const onHold = productionItems.filter(i => i.status === "on_hold");
   if (onHold.length > 0) bottlenecks.push(`${onHold.length} production item(s) on hold`);
@@ -282,9 +290,28 @@ export function OverviewTab({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {productionItems.length > 0 && (
+          <Card className="shadow-card">
+            <CardHeader><CardTitle className="text-sm">Production lines (War Room)</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline">Worst gate: {worstQualificationStatus(productionItems) || "—"}</Badge>
+                <Badge variant="outline">Material readiness: {materialOrderReadinessPct(productionItems)}%</Badge>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Line exposure (est.)</span>
+                <span className="font-mono font-semibold">${sumLineEstimatedExposure(productionItems).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Pre-draw (lines)</span>
+                <span className="font-mono font-semibold">${sumPreDrawAmounts(productionItems).toLocaleString()}</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
         {/* Qualification */}
         <Card className="shadow-card">
-          <CardHeader><CardTitle className="text-sm">Qualification</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-sm">Qualification (job-level)</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             <div className="flex items-center gap-2">
               <Badge className={
@@ -327,6 +354,91 @@ export function OverviewTab({
           </Card>
         )}
       </div>
+
+      {productionItems.length > 0 && (
+        <Card className="shadow-card">
+          <CardHeader>
+            <CardTitle className="text-sm">Line scope (War Room)</CardTitle>
+            <p className="text-xs text-muted-foreground">Shingle, pitch, drop, and delivery from each production line.</p>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            {productionItems.map((item) => {
+              const m = parseScopeMetadata(item.scope_metadata);
+              const drop = item.drop_location?.trim();
+              const del = item.delivery_date
+                ? format(new Date(item.delivery_date), "MMM d, yyyy")
+                : null;
+              const hasAny =
+                m.shingle_style ||
+                m.shingle_manufacturer ||
+                m.shingle_color ||
+                m.drip_edge_color ||
+                m.pitch ||
+                drop ||
+                del;
+              return (
+                <div key={item.id} className="rounded-md border bg-muted/20 p-3 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-semibold text-foreground">{item.trade_types?.name || "Line"}</span>
+                    <Badge variant="outline" className="text-[10px]">
+                      {item.material_order_status || "—"}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground line-clamp-2">{item.scope_description || "—"}</p>
+                  {!hasAny ? (
+                    <p className="text-xs text-muted-foreground">No scope metadata yet — edit in War Room workbook.</p>
+                  ) : (
+                    <dl className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2 text-xs">
+                      {m.shingle_style ? (
+                        <>
+                          <dt className="text-muted-foreground">Product / style</dt>
+                          <dd>{m.shingle_style}</dd>
+                        </>
+                      ) : null}
+                      {m.shingle_manufacturer ? (
+                        <>
+                          <dt className="text-muted-foreground">Manufacturer</dt>
+                          <dd>{m.shingle_manufacturer}</dd>
+                        </>
+                      ) : null}
+                      {m.shingle_color ? (
+                        <>
+                          <dt className="text-muted-foreground">Shingle color</dt>
+                          <dd>{m.shingle_color}</dd>
+                        </>
+                      ) : null}
+                      {m.drip_edge_color ? (
+                        <>
+                          <dt className="text-muted-foreground">Drip edge color</dt>
+                          <dd>{m.drip_edge_color}</dd>
+                        </>
+                      ) : null}
+                      {m.pitch ? (
+                        <>
+                          <dt className="text-muted-foreground">Pitch</dt>
+                          <dd>{m.pitch}</dd>
+                        </>
+                      ) : null}
+                      {drop ? (
+                        <>
+                          <dt className="text-muted-foreground">Drop location</dt>
+                          <dd>{drop}</dd>
+                        </>
+                      ) : null}
+                      {del ? (
+                        <>
+                          <dt className="text-muted-foreground">Material delivery</dt>
+                          <dd>{del}</dd>
+                        </>
+                      ) : null}
+                    </dl>
+                  )}
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Bottlenecks */}
       {bottlenecks.length > 0 && (

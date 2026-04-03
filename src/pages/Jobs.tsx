@@ -120,11 +120,11 @@ export default function Jobs() {
         {isLoading ? (
           <p className="text-center text-muted-foreground py-12">Loading jobs...</p>
         ) : view === "board" ? (
-          <KanbanBoard jobs={filtered} onStatusChange={handleStatusChange} onJobClick={(id) => navigate(`/jobs/${id}`)} />
+          <KanbanBoard jobs={filtered} onStatusChange={handleStatusChange} onJobClick={(id) => navigate(`/operations/${id}`)} />
         ) : isMobile ? (
-          <JobCardList jobs={filtered} onJobClick={(id) => navigate(`/jobs/${id}`)} />
+          <JobCardList jobs={filtered} onJobClick={(id) => navigate(`/operations/${id}`)} />
         ) : (
-          <JobTable jobs={filtered} onJobClick={(id) => navigate(`/jobs/${id}`)} />
+          <JobTable jobs={filtered} onJobClick={(id) => navigate(`/operations/${id}`)} />
         )}
       </PageWrapper>
     </AppLayout>

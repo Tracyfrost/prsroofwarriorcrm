@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { JobOrderingLine } from "@/lib/jobOrderingTemplate";
 
 export type MilestoneHistory = {
   id: string;
@@ -18,12 +19,44 @@ export type CheckEntry = {
   notes: string;
 };
 
+/** Persisted on `jobs.qualification` JSONB — extended War Room fields plus legacy trigger keys. */
 export type Qualification = {
   estimate_roof_sq?: number;
   estimate_cost?: number;
   first_check_funds?: number;
   variance?: number;
   status?: string;
+  squares_pull_off?: number;
+  squares_put_back?: number;
+  price_per_sq?: number;
+  scope_sq_all_structures?: string;
+  scope_actual_sq?: string;
+  shingle_type?: string;
+  shingle_color?: string;
+  drip_edge_color?: string;
+  roof_pitch?: string;
+  materials_drop_location?: string;
+  material_delivery_date?: string;
+  additional_comments?: string;
+  /** Per draw type: include amount in estimated cost rollup */
+  estimated_cost_draw_inclusions?: Record<string, boolean>;
+  job_ordering_lines?: JobOrderingLine[];
+  qualify_yes?: boolean;
+  deductible?: number;
+  estimate_line?: number;
+  eagleview_fee?: number;
+  /** Override for pre-draw; if unset, 10% of first_check_funds */
+  pre_draw_amount_manual?: number;
+  job_cost_misc?: number;
+  rolled_roofing?: number;
+  two_story_fee?: number;
+  gutters?: number;
+  patio?: number;
+  interior?: number;
+  supp_appr_fee?: number;
+  recoverable_depreciation?: number;
+  other_cost_projected?: number;
+  installer_pay_total?: number;
 };
 
 export const MILESTONE_KEYS = [
@@ -97,9 +130,16 @@ export function useUpdateQualification() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, qualification }: { id: string; qualification: Qualification }) => {
+      const cached = qc.getQueryData<{ qualification?: unknown }>(["job", id]);
+      const prevRaw = cached?.qualification;
+      const prev =
+        prevRaw && typeof prevRaw === "object" && !Array.isArray(prevRaw)
+          ? (prevRaw as Record<string, unknown>)
+          : {};
+      const merged = { ...prev, ...(qualification as Record<string, unknown>) } as Qualification;
       const { data, error } = await supabase
         .from("jobs")
-        .update({ qualification } as any)
+        .update({ qualification: merged } as any)
         .eq("id", id)
         .select()
         .single();

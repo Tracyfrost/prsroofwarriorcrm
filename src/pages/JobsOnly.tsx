@@ -103,7 +103,7 @@ export default function JobsOnly() {
     switch (key) {
       case "job_id":
         return (
-          <Link to={`/jobs/${j.id}`} className="font-mono font-medium text-primary hover:underline text-sm">
+          <Link to={`/operations/${j.id}`} className="font-mono font-medium text-primary hover:underline text-sm">
             {j.job_id}
             {j.parent_job_id && <Badge variant="secondary" className="ml-1 text-[8px] px-1 py-0">Sub</Badge>}
           </Link>
@@ -216,7 +216,7 @@ export default function JobsOnly() {
             {/* Mobile card list */}
             <div className="space-y-2 sm:hidden">
               {filtered.map(j => (
-                <Link key={j.id} to={`/jobs/${j.id}`}>
+                <Link key={j.id} to={`/operations/${j.id}`}>
                   <Card className="shadow-card hover:shadow-card-hover transition-shadow">
                     <CardContent className="p-3">
                       <div className="flex items-start justify-between mb-1">

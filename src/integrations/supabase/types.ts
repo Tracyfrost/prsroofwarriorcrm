@@ -844,17 +844,27 @@ export type Database = {
           completed_date: string | null
           created_at: string
           created_by: string | null
+          crew_assigned: unknown
           dependencies: string | null
+          delivery_date: string | null
+          drop_location: string | null
+          estimate_per_sq: number | null
           id: string
           job_id: string
           labor_cost: number
           labor_vendor: string | null
           material_cost: number
+          material_order_status: string
           material_vendor: string | null
+          pre_draw_amount: number | null
           quantity: number
+          qualification_status: string
+          recoverable_depreciation: number | null
           scheduled_end_date: string | null
           scheduled_start_date: string | null
           scope_description: string
+          scope_metadata: unknown
+          sol_notes: string | null
           status: string
           trade_type_id: string
           unit_type: string
@@ -866,17 +876,27 @@ export type Database = {
           completed_date?: string | null
           created_at?: string
           created_by?: string | null
+          crew_assigned?: unknown
           dependencies?: string | null
+          delivery_date?: string | null
+          drop_location?: string | null
+          estimate_per_sq?: number | null
           id?: string
           job_id: string
           labor_cost?: number
           labor_vendor?: string | null
           material_cost?: number
+          material_order_status?: string
           material_vendor?: string | null
+          pre_draw_amount?: number | null
           quantity?: number
+          qualification_status?: string
+          recoverable_depreciation?: number | null
           scheduled_end_date?: string | null
           scheduled_start_date?: string | null
           scope_description?: string
+          scope_metadata?: unknown
+          sol_notes?: string | null
           status?: string
           trade_type_id: string
           unit_type?: string
@@ -888,17 +908,27 @@ export type Database = {
           completed_date?: string | null
           created_at?: string
           created_by?: string | null
+          crew_assigned?: unknown
           dependencies?: string | null
+          delivery_date?: string | null
+          drop_location?: string | null
+          estimate_per_sq?: number | null
           id?: string
           job_id?: string
           labor_cost?: number
           labor_vendor?: string | null
           material_cost?: number
+          material_order_status?: string
           material_vendor?: string | null
+          pre_draw_amount?: number | null
           quantity?: number
+          qualification_status?: string
+          recoverable_depreciation?: number | null
           scheduled_end_date?: string | null
           scheduled_start_date?: string | null
           scope_description?: string
+          scope_metadata?: unknown
+          sol_notes?: string | null
           status?: string
           trade_type_id?: string
           unit_type?: string

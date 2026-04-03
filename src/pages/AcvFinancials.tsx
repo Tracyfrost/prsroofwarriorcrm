@@ -141,7 +141,7 @@ export default function AcvFinancials() {
                       return (
                         <tr key={j.id} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
                           <td className="px-4 py-3">
-                             <Link to={`/jobs/${j.id}`} className="font-medium text-foreground hover:text-accent transition-colors">{j.job_id}</Link>
+                             <Link to={`/operations/${j.id}`} className="font-medium text-foreground hover:text-accent transition-colors">{j.job_id}</Link>
                            </td>
                            <td className="px-4 py-3"><TradesBadges trades={j.trade_types ?? []} size="xs" /></td>
                            <td className="px-4 py-3 text-muted-foreground">{j.customers?.name || "—"}</td>

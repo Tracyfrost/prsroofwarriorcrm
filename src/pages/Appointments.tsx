@@ -277,7 +277,7 @@ export default function Appointments() {
                     <span className="text-muted-foreground">Job:</span>{" "}
                     <button
                       className="text-primary hover:underline font-medium"
-                      onClick={() => { setSelectedEvent(null); navigate(`/jobs/${selectedEvent.resource.job_id}`); }}
+                      onClick={() => { setSelectedEvent(null); navigate(`/operations/${selectedEvent.resource.job_id}`); }}
                     >
                       {selectedEvent.resource.jobs.job_id}
                     </button>
@@ -288,7 +288,7 @@ export default function Appointments() {
                     <span className="text-muted-foreground">Outcome:</span> {selectedEvent.resource.outcome}
                   </div>
                 )}
-                <Button variant="outline" className="w-full" onClick={() => { setSelectedEvent(null); navigate(`/jobs/${selectedEvent.resource.job_id}`); }}>
+                <Button variant="outline" className="w-full" onClick={() => { setSelectedEvent(null); navigate(`/operations/${selectedEvent.resource.job_id}`); }}>
                   View Job Details
                 </Button>
               </div>

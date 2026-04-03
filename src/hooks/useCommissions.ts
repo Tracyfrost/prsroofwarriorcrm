@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 
+// Phase 2: tie commission breakdown copy to job_production_items rollups if product needs line-level explanation.
+
 export type Commission = Tables<"commissions"> & {
   jobs?: { job_id: string; customers?: { name: string } | null } | null;
   profiles?: { name: string } | null;

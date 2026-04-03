@@ -110,7 +110,7 @@ function FeedDetail({ media, navigate, onAnnotate }: { media: SiteCamMedia; navi
         </div>
         <div className="flex gap-2">
           {(media.jobs as any)?.job_id && (
-            <Button variant="outline" size="sm" onClick={() => navigate(`/jobs/${media.job_id}`)}>
+            <Button variant="outline" size="sm" onClick={() => navigate(`/operations/${media.job_id}`)}>
               View Job: {(media.jobs as any).job_id}
             </Button>
           )}

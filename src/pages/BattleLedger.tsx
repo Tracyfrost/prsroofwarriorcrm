@@ -185,7 +185,7 @@ export default function BattleLedger() {
                     return (
                       <TableRow key={j.id}>
                         <TableCell>
-                           <Link to={`/jobs/${j.id}`} className="font-mono font-medium text-primary hover:underline">{j.job_id}</Link>
+                           <Link to={`/operations/${j.id}`} className="font-mono font-medium text-primary hover:underline">{j.job_id}</Link>
                          </TableCell>
                          <TableCell><TradesBadges trades={j.trade_types ?? []} size="xs" /></TableCell>
                          <TableCell>{j.customers?.name ?? "—"}</TableCell>

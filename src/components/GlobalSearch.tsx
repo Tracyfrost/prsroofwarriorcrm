@@ -116,7 +116,7 @@ export function GlobalSearch() {
                 {results.jobs.map((j) => (
                   <button
                     key={j.id}
-                    onClick={() => handleSelect(`/jobs/${j.id}`)}
+                    onClick={() => handleSelect(`/operations/${j.id}`)}
                     className="flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-accent/50 transition-colors"
                   >
                     <Briefcase className="h-3.5 w-3.5 text-muted-foreground shrink-0" />

@@ -10,3 +10,29 @@ verify_jwt = false
 [functions.user-admin]
 # JWT is validated inside the function (Bearer + auth.getUser). Disables gateway duplicate check that caused 401 Invalid JWT for valid sessions.
 verify_jwt = false
+
+# Auth URLs for Vercel production + previews + local dev (pushed with `supabase config push`).
+[auth]
+site_url = "https://prsroofwarriorcrm-main.vercel.app"
+additional_redirect_urls = [
+  "https://prsroofwarriorcrm-main.vercel.app/**",
+  "https://prsroofwarriorcrm-main-prsroofings-projects.vercel.app/**",
+  "https://prsroofwarriorcrm-main-prsroofing-prsroofings-projects.vercel.app/**",
+  "https://**--prsroofings-projects.vercel.app/**",
+  "http://127.0.0.1:5173/**",
+  "http://localhost:5173/**",
+]
+
+# Restore hosted settings that a minimal [auth] push would otherwise reset to CLI defaults.
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+secure_password_change = false
+max_frequency = "1m0s"
+otp_length = 8
+otp_expiry = 3600
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true

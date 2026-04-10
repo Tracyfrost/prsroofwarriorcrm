@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useCustomer, useCustomerJobs, useCustomerAppointments, useCustomerDocuments } from "@/hooks/useCustomer";
 import { useAllProfiles } from "@/hooks/useHierarchy";
@@ -41,6 +41,7 @@ import {
   parseStoredAppointment,
   type OutcomeRating,
 } from "@/components/appointments/appointmentOutcomeModel";
+import { customerJobsState } from "@/lib/jobNavigation";
 
 // Status labels/colors from flow_stages (job_status flow)
 
@@ -88,6 +89,7 @@ function AddressForm({ value, onChange, label }: { value: AddressFields; onChang
 export default function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -328,6 +330,8 @@ export default function CustomerDetail() {
   const custLeadSource = (customer as any).lead_source;
   const custAssignedRep = (customer as any).assigned_rep_id;
 
+  const initialTab = searchParams.get("tab") === "jobs" ? "jobs" : "details";
+
   return (
     <AppLayout>
       <div className="animate-fade-in">
@@ -412,7 +416,7 @@ export default function CustomerDetail() {
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="details">
+        <Tabs defaultValue={initialTab}>
           <TabsList className="mb-4">
             <TabsTrigger value="details"><StickyNote className="mr-1.5 h-3.5 w-3.5" />Details</TabsTrigger>
             <TabsTrigger value="jobs"><Briefcase className="mr-1.5 h-3.5 w-3.5" />Jobs ({jobs.length})</TabsTrigger>
@@ -733,7 +737,11 @@ export default function CustomerDetail() {
                             const subs = subsByParent[j.id] || [];
                             return (
                               <>{/* Main job row */}
-                                <TableRow key={j.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/operations/${j.id}`)}>
+                                <TableRow
+                                  key={j.id}
+                                  className="cursor-pointer hover:bg-muted/50"
+                                  onClick={() => navigate(`/operations/${j.id}`, { state: customerJobsState(customer.id) })}
+                                >
                                   <TableCell className="font-medium font-mono">
                                     {j.job_id}
                                     {subs.length > 0 && <Badge variant="outline" className="ml-2 text-[9px]">{subs.length} sub{subs.length !== 1 ? "s" : ""}</Badge>}
@@ -756,7 +764,11 @@ export default function CustomerDetail() {
                                   <TableCell className="text-right text-sm">${j.checksReceived.toLocaleString()}</TableCell>
                                 </TableRow>
                                 {subs.map((sub) => (
-                                  <TableRow key={sub.id} className="cursor-pointer hover:bg-muted/50 bg-muted/20" onClick={() => navigate(`/operations/${sub.id}`)}>
+                                  <TableRow
+                                    key={sub.id}
+                                    className="cursor-pointer hover:bg-muted/50 bg-muted/20"
+                                    onClick={() => navigate(`/operations/${sub.id}`, { state: customerJobsState(customer.id) })}
+                                  >
                                     <TableCell className="font-mono text-sm pl-8 text-muted-foreground">↳ {sub.job_id}</TableCell>
                                     <TableCell className="text-xs text-muted-foreground">sub #{(sub as any).sub_number}</TableCell>
                                     <TableCell>

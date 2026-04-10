@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -23,10 +23,13 @@ import {
   useCreateTradeType,
   useUpdateTradeType,
   useDeleteTradeType,
+  useBulkUpdateTradeTypeOrder,
+  type TradeType,
 } from "@/hooks/useProduction";
+import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { Switch } from "@/components/ui/switch";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Network, Hammer, Plus, ShieldCheck, ShieldX, Pencil, Trash2, Sliders, Settings2, Calendar, CreditCard, Shield, Swords, Receipt, FileSpreadsheet } from "lucide-react";
+import { Network, Hammer, Plus, ShieldCheck, ShieldX, Pencil, Trash2, Sliders, Settings2, Calendar, CreditCard, Shield, Swords, Receipt, FileSpreadsheet, GripVertical } from "lucide-react";
 import { UserAdminTable } from "@/components/UserAdminTable";
 import { CustomizationsTab } from "@/components/settings/CustomizationsTab";
 import { GlobalSettingsTab } from "@/components/settings/GlobalSettingsTab";
@@ -47,6 +50,7 @@ export default function SettingsPage() {
   const createTradeType = useCreateTradeType();
   const deleteTradeType = useDeleteTradeType();
   const updateTradeType = useUpdateTradeType();
+  const bulkUpdateTradeOrder = useBulkUpdateTradeTypeOrder();
 
   // Trade type form
   const [showAddTrade, setShowAddTrade] = useState(false);
@@ -59,6 +63,31 @@ export default function SettingsPage() {
   const [editTradeUnit, setEditTradeUnit] = useState("");
   const [editTradeLabor, setEditTradeLabor] = useState("");
   const [editTradeMaterial, setEditTradeMaterial] = useState("");
+  const [orderedTradeTypes, setOrderedTradeTypes] = useState<TradeType[] | null>(null);
+  const displayTradeTypes = orderedTradeTypes ?? tradeTypes;
+
+  const handleTradeTypesDragEnd = useCallback(
+    (result: DropResult) => {
+      if (!result.destination || tradeTypes.length === 0) return;
+      const items = Array.from(tradeTypes);
+      const [moved] = items.splice(result.source.index, 1);
+      items.splice(result.destination.index, 0, moved);
+      setOrderedTradeTypes(items);
+      const updates = items.map((t, i) => ({ id: t.id, sort_order: i }));
+      bulkUpdateTradeOrder.mutate(updates, {
+        onSuccess: () => setOrderedTradeTypes(null),
+        onError: (e) => {
+          setOrderedTradeTypes(null);
+          toast({
+            title: "Error",
+            description: e instanceof Error ? e.message : String(e),
+            variant: "destructive",
+          });
+        },
+      });
+    },
+    [tradeTypes, bulkUpdateTradeOrder, toast],
+  );
 
   const handleAddTrade = async () => {
     if (!tradeName) return;
@@ -176,106 +205,138 @@ export default function SettingsPage() {
                   </Button>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Unit</TableHead>
-                        <TableHead>Default Labor/Unit</TableHead>
-                        <TableHead>Default Material/Unit</TableHead>
-                        <TableHead>Active</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {tradeTypes.map((tt) => (
-                        <TableRow key={tt.id}>
-                          {editingTradeId === tt.id ? (
-                            <>
-                              <TableCell><Input value={editTradeName} onChange={(e) => setEditTradeName(e.target.value)} className="h-8" /></TableCell>
-                              <TableCell>
-                                <Select value={editTradeUnit} onValueChange={setEditTradeUnit}>
-                                  <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                                  <SelectContent>{["Squares","LF","EA","SF","Job"].map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
-                                </Select>
-                              </TableCell>
-                              <TableCell><Input type="number" value={editTradeLabor} onChange={(e) => setEditTradeLabor(e.target.value)} className="h-8 w-20 font-mono" /></TableCell>
-                              <TableCell><Input type="number" value={editTradeMaterial} onChange={(e) => setEditTradeMaterial(e.target.value)} className="h-8 w-20 font-mono" /></TableCell>
-                              <TableCell>
-                                <Switch checked={tt.active} onCheckedChange={(checked) => updateTradeType.mutate({ id: tt.id, active: checked })} />
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex gap-1">
-                                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={async () => {
-                                    try {
-                                      await updateTradeType.mutateAsync({
-                                        id: tt.id,
-                                        name: editTradeName,
-                                        unit_type: editTradeUnit,
-                                        default_labor_cost_per_unit: parseFloat(editTradeLabor) || 0,
-                                        default_material_cost_per_unit: parseFloat(editTradeMaterial) || 0,
-                                      });
-                                      setEditingTradeId(null);
-                                      toast({ title: "Trade type updated" });
-                                    } catch (e: any) {
-                                      toast({ title: "Error", description: e.message, variant: "destructive" });
-                                    }
-                                  }}>Save</Button>
-                                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setEditingTradeId(null)}>Cancel</Button>
-                                </div>
-                              </TableCell>
-                            </>
-                          ) : (
-                            <>
-                              <TableCell className="font-medium">{tt.name}</TableCell>
-                              <TableCell className="text-sm">{tt.unit_type}</TableCell>
-                              <TableCell className="text-sm font-mono">${tt.default_labor_cost_per_unit}</TableCell>
-                              <TableCell className="text-sm font-mono">${tt.default_material_cost_per_unit}</TableCell>
-                              <TableCell>
-                                <Switch checked={tt.active} onCheckedChange={(checked) => updateTradeType.mutate({ id: tt.id, active: checked })} />
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex gap-1">
-                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
-                                    setEditingTradeId(tt.id);
-                                    setEditTradeName(tt.name);
-                                    setEditTradeUnit(tt.unit_type);
-                                    setEditTradeLabor(String(tt.default_labor_cost_per_unit));
-                                    setEditTradeMaterial(String(tt.default_material_cost_per_unit));
-                                  }}>
-                                    <Pencil className="h-3 w-3" />
-                                  </Button>
-                                  <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive">
-                                        <Trash2 className="h-3 w-3" />
-                                      </Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                      <AlertDialogHeader>
-                                        <AlertDialogTitle>Delete "{tt.name}"?</AlertDialogTitle>
-                                        <AlertDialogDescription>This will remove this trade type. Jobs already using it won't be affected.</AlertDialogDescription>
-                                      </AlertDialogHeader>
-                                      <AlertDialogFooter>
-                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                        <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
-                                          try {
-                                            await deleteTradeType.mutateAsync(tt.id);
-                                            toast({ title: "Trade type deleted" });
-                                          } catch (e: any) {
-                                            toast({ title: "Error", description: e.message, variant: "destructive" });
-                                          }
-                                        }}>Delete</AlertDialogAction>
-                                      </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                  </AlertDialog>
-                                </div>
-                              </TableCell>
-                            </>
-                          )}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <DragDropContext onDragEnd={handleTradeTypesDragEnd}>
+                    <Droppable droppableId="trade-types-table">
+                      {(dropProvided) => (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-8" />
+                              <TableHead>Name</TableHead>
+                              <TableHead>Unit</TableHead>
+                              <TableHead>Default Labor/Unit</TableHead>
+                              <TableHead>Default Material/Unit</TableHead>
+                              <TableHead>Active</TableHead>
+                              <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody ref={dropProvided.innerRef} {...dropProvided.droppableProps}>
+                            {displayTradeTypes.map((tt, idx) => (
+                              <Draggable
+                                key={tt.id}
+                                draggableId={tt.id}
+                                index={idx}
+                                isDragDisabled={editingTradeId === tt.id}
+                              >
+                                {(dragProvided, snap) => (
+                                  <TableRow
+                                    ref={dragProvided.innerRef}
+                                    {...dragProvided.draggableProps}
+                                    className={snap.isDragging ? "bg-muted/60" : undefined}
+                                  >
+                                    {editingTradeId === tt.id ? (
+                                      <TableCell className="w-8 px-1" />
+                                    ) : (
+                                      <TableCell
+                                        className="w-8 px-1 cursor-grab active:cursor-grabbing touch-none"
+                                        {...dragProvided.dragHandleProps}
+                                      >
+                                        <GripVertical className="h-4 w-4 text-muted-foreground" />
+                                      </TableCell>
+                                    )}
+                                    {editingTradeId === tt.id ? (
+                                      <>
+                                        <TableCell><Input value={editTradeName} onChange={(e) => setEditTradeName(e.target.value)} className="h-8" /></TableCell>
+                                        <TableCell>
+                                          <Select value={editTradeUnit} onValueChange={setEditTradeUnit}>
+                                            <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                                            <SelectContent>{["Squares","LF","EA","SF","Job"].map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                                          </Select>
+                                        </TableCell>
+                                        <TableCell><Input type="number" value={editTradeLabor} onChange={(e) => setEditTradeLabor(e.target.value)} className="h-8 w-20 font-mono" /></TableCell>
+                                        <TableCell><Input type="number" value={editTradeMaterial} onChange={(e) => setEditTradeMaterial(e.target.value)} className="h-8 w-20 font-mono" /></TableCell>
+                                        <TableCell>
+                                          <Switch checked={tt.active} onCheckedChange={(checked) => updateTradeType.mutate({ id: tt.id, active: checked })} />
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                          <div className="flex justify-end gap-1">
+                                            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={async () => {
+                                              try {
+                                                await updateTradeType.mutateAsync({
+                                                  id: tt.id,
+                                                  name: editTradeName,
+                                                  unit_type: editTradeUnit,
+                                                  default_labor_cost_per_unit: parseFloat(editTradeLabor) || 0,
+                                                  default_material_cost_per_unit: parseFloat(editTradeMaterial) || 0,
+                                                });
+                                                setEditingTradeId(null);
+                                                toast({ title: "Trade type updated" });
+                                              } catch (e: any) {
+                                                toast({ title: "Error", description: e.message, variant: "destructive" });
+                                              }
+                                            }}>Save</Button>
+                                            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setEditingTradeId(null)}>Cancel</Button>
+                                          </div>
+                                        </TableCell>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <TableCell className="font-medium">{tt.name}</TableCell>
+                                        <TableCell className="text-sm">{tt.unit_type}</TableCell>
+                                        <TableCell className="text-sm font-mono">${tt.default_labor_cost_per_unit}</TableCell>
+                                        <TableCell className="text-sm font-mono">${tt.default_material_cost_per_unit}</TableCell>
+                                        <TableCell>
+                                          <Switch checked={tt.active} onCheckedChange={(checked) => updateTradeType.mutate({ id: tt.id, active: checked })} />
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                          <div className="flex justify-end gap-1">
+                                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
+                                              setEditingTradeId(tt.id);
+                                              setEditTradeName(tt.name);
+                                              setEditTradeUnit(tt.unit_type);
+                                              setEditTradeLabor(String(tt.default_labor_cost_per_unit));
+                                              setEditTradeMaterial(String(tt.default_material_cost_per_unit));
+                                            }}>
+                                              <Pencil className="h-3 w-3" />
+                                            </Button>
+                                            <AlertDialog>
+                                              <AlertDialogTrigger asChild>
+                                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive">
+                                                  <Trash2 className="h-3 w-3" />
+                                                </Button>
+                                              </AlertDialogTrigger>
+                                              <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                  <AlertDialogTitle>Delete "{tt.name}"?</AlertDialogTitle>
+                                                  <AlertDialogDescription>This will remove this trade type. Jobs already using it won't be affected.</AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                  <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
+                                                    try {
+                                                      await deleteTradeType.mutateAsync(tt.id);
+                                                      toast({ title: "Trade type deleted" });
+                                                    } catch (e: any) {
+                                                      toast({ title: "Error", description: e.message, variant: "destructive" });
+                                                    }
+                                                  }}>Delete</AlertDialogAction>
+                                                </AlertDialogFooter>
+                                              </AlertDialogContent>
+                                            </AlertDialog>
+                                          </div>
+                                        </TableCell>
+                                      </>
+                                    )}
+                                  </TableRow>
+                                )}
+                              </Draggable>
+                            ))}
+                            {dropProvided.placeholder}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </Droppable>
+                  </DragDropContext>
                 </CardContent>
               </Card>
             </TabsContent>

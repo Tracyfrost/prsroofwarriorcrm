@@ -19,6 +19,11 @@ import { resolvePlanningRoofSquares, type PlanningJobSquares } from "@/lib/roofS
 import { Clock, Ruler, ShieldCheck, BarChart3, Hammer, FileSpreadsheet, Shield, ScrollText, DollarSign, FileText } from "lucide-react";
 import { JobLogsTab } from "@/components/production/JobLogsTab";
 import { DocumentsPanel } from "@/components/DocumentsPanel";
+import { cn } from "@/lib/utils";
+
+/** War Room sub-tabs: gold bottom bar when active + blue square frame */
+const productionSubTabTriggerClass =
+  "flex items-center gap-1.5 text-xs min-h-[48px] sm:min-h-0 rounded-md px-3 py-2 border-2 border-transparent text-[var(--wc-muted)] data-[state=active]:text-[var(--wc-ink)] data-[state=active]:border-blue-600 data-[state=active]:border-b-[var(--wc-amber)] dark:data-[state=active]:border-blue-400 data-[state=active]:bg-transparent hover:text-[var(--wc-ink)] hover:bg-[var(--wc-surface-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2";
 
 interface Props {
   jobId: string;
@@ -37,9 +42,11 @@ interface Props {
   isMainJob?: boolean;
   parentClaimNumber?: string | null;
   carrierFromCustomer?: string | null;
+  /** Operations: true when outer "War Room" tab is selected — green glow on sub-tab bar */
+  subNavGreenGlow?: boolean;
 }
 
-export function ProductionSection({ jobId, jobDisplayId, milestones, qualification, numberOfSquaresRaw, squaresEstimated, squaresActualInstalled, squaresFinal, assignments, profileMap, tracking, isMainJob = true, parentClaimNumber, carrierFromCustomer }: Props) {
+export function ProductionSection({ jobId, jobDisplayId, milestones, qualification, numberOfSquaresRaw, squaresEstimated, squaresActualInstalled, squaresFinal, assignments, profileMap, tracking, isMainJob = true, parentClaimNumber, carrierFromCustomer, subNavGreenGlow = false }: Props) {
   const planningJobSquares: PlanningJobSquares = useMemo(
     () => ({
       squares_estimated: squaresEstimated ?? null,
@@ -69,65 +76,41 @@ export function ProductionSection({ jobId, jobDisplayId, milestones, qualificati
 
   return (
     <Tabs value={prodTab} onValueChange={setProdTab} className="w-full">
-      <TabsList className="w-full flex-wrap h-auto gap-1 px-1 pt-2 pb-1 overflow-x-auto bg-[var(--wc-surface-2)] border-t border-[var(--wc-border)] rounded-none">
-        <TabsTrigger
-          value="overview"
-          className="flex items-center gap-1.5 text-xs min-h-[48px] sm:min-h-0 px-3 py-2 border-b-2 border-transparent text-[var(--wc-muted)] data-[state=active]:text-[var(--wc-ink)] data-[state=active]:border-b-[var(--wc-amber)] data-[state=active]:bg-transparent hover:text-[var(--wc-ink)] hover:bg-[var(--wc-surface-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
-        >
-          <BarChart3 className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> Overview
+      <TabsList
+        className={cn(
+          "w-full flex-wrap h-auto gap-1 px-1 pt-2 pb-1 overflow-x-auto bg-[var(--wc-surface-2)] border-t border-[var(--wc-border)] rounded-none transition-[box-shadow,background-color,border-color] duration-300",
+          subNavGreenGlow &&
+            "border-t-green-500/70 bg-green-500/[0.07] shadow-[0_0_22px_rgba(34,197,94,0.38)] dark:border-t-green-400/55 dark:bg-green-500/10 dark:shadow-[0_0_28px_rgba(74,222,128,0.32)]",
+        )}
+      >
+        <TabsTrigger value="overview" className={productionSubTabTriggerClass}>
+          <BarChart3 className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> Prod Overview
         </TabsTrigger>
-        <TabsTrigger
-          value="war-room"
-          className="flex items-center gap-1.5 text-xs min-h-[48px] sm:min-h-0 px-3 py-2 border-b-2 border-transparent text-[var(--wc-muted)] data-[state=active]:text-[var(--wc-ink)] data-[state=active]:border-b-[var(--wc-amber)] data-[state=active]:bg-transparent hover:text-[var(--wc-ink)] hover:bg-[var(--wc-surface-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
-        >
-          <Hammer className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> War Room
+        <TabsTrigger value="war-room" className={productionSubTabTriggerClass}>
+          <Hammer className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> Production Items
         </TabsTrigger>
-        <TabsTrigger
-          value="job-files"
-          className="flex items-center gap-1.5 text-xs min-h-[48px] sm:min-h-0 px-3 py-2 border-b-2 border-transparent text-[var(--wc-muted)] data-[state=active]:text-[var(--wc-ink)] data-[state=active]:border-b-[var(--wc-amber)] data-[state=active]:bg-transparent hover:text-[var(--wc-ink)] hover:bg-[var(--wc-surface-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
-        >
+        <TabsTrigger value="job-files" className={productionSubTabTriggerClass}>
           <FileText className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> Job files
         </TabsTrigger>
-        <TabsTrigger
-          value="milestones"
-          className="flex items-center gap-1.5 text-xs min-h-[48px] sm:min-h-0 px-3 py-2 border-b-2 border-transparent text-[var(--wc-muted)] data-[state=active]:text-[var(--wc-ink)] data-[state=active]:border-b-[var(--wc-amber)] data-[state=active]:bg-transparent hover:text-[var(--wc-ink)] hover:bg-[var(--wc-surface-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
-        >
-          <Clock className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> Milestones
-        </TabsTrigger>
-        <TabsTrigger
-          value="measurements"
-          className="flex items-center gap-1.5 text-xs min-h-[48px] sm:min-h-0 px-3 py-2 border-b-2 border-transparent text-[var(--wc-muted)] data-[state=active]:text-[var(--wc-ink)] data-[state=active]:border-b-[var(--wc-amber)] data-[state=active]:bg-transparent hover:text-[var(--wc-ink)] hover:bg-[var(--wc-surface-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
-        >
+        <TabsTrigger value="measurements" className={productionSubTabTriggerClass}>
           <Ruler className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> Measurements
         </TabsTrigger>
-        <TabsTrigger
-          value="qualification"
-          className="flex items-center gap-1.5 text-xs min-h-[48px] sm:min-h-0 px-3 py-2 border-b-2 border-transparent text-[var(--wc-muted)] data-[state=active]:text-[var(--wc-ink)] data-[state=active]:border-b-[var(--wc-amber)] data-[state=active]:bg-transparent hover:text-[var(--wc-ink)] hover:bg-[var(--wc-surface-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
-        >
+        <TabsTrigger value="qualification" className={productionSubTabTriggerClass}>
           <ShieldCheck className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> Qualification
         </TabsTrigger>
-        <TabsTrigger
-          value="tracking"
-          className="flex items-center gap-1.5 text-xs min-h-[48px] sm:min-h-0 px-3 py-2 border-b-2 border-transparent text-[var(--wc-muted)] data-[state=active]:text-[var(--wc-ink)] data-[state=active]:border-b-[var(--wc-amber)] data-[state=active]:bg-transparent hover:text-[var(--wc-ink)] hover:bg-[var(--wc-surface-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
-        >
+        <TabsTrigger value="tracking" className={productionSubTabTriggerClass}>
           <FileSpreadsheet className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> Tracking
         </TabsTrigger>
-        <TabsTrigger
-          value="claim"
-          className="flex items-center gap-1.5 text-xs min-h-[48px] sm:min-h-0 px-3 py-2 border-b-2 border-transparent text-[var(--wc-muted)] data-[state=active]:text-[var(--wc-ink)] data-[state=active]:border-b-[var(--wc-amber)] data-[state=active]:bg-transparent hover:text-[var(--wc-ink)] hover:bg-[var(--wc-surface-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
-        >
+        <TabsTrigger value="claim" className={productionSubTabTriggerClass}>
           <Shield className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> Claim
         </TabsTrigger>
-        <TabsTrigger
-          value="checks"
-          className="flex items-center gap-1.5 text-xs min-h-[48px] sm:min-h-0 px-3 py-2 border-b-2 border-transparent text-[var(--wc-muted)] data-[state=active]:text-[var(--wc-ink)] data-[state=active]:border-b-[var(--wc-amber)] data-[state=active]:bg-transparent hover:text-[var(--wc-ink)] hover:bg-[var(--wc-surface-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
-        >
+        <TabsTrigger value="checks" className={productionSubTabTriggerClass}>
           <DollarSign className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> Checks
         </TabsTrigger>
-        <TabsTrigger
-          value="logs"
-          className="flex items-center gap-1.5 text-xs min-h-[48px] sm:min-h-0 px-3 py-2 border-b-2 border-transparent text-[var(--wc-muted)] data-[state=active]:text-[var(--wc-ink)] data-[state=active]:border-b-[var(--wc-amber)] data-[state=active]:bg-transparent hover:text-[var(--wc-ink)] hover:bg-[var(--wc-surface-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
-        >
+        <TabsTrigger value="milestones" className={productionSubTabTriggerClass}>
+          <Clock className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> Milestones
+        </TabsTrigger>
+        <TabsTrigger value="logs" className={productionSubTabTriggerClass}>
           <ScrollText className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> Logs
         </TabsTrigger>
       </TabsList>

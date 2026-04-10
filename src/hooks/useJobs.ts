@@ -129,7 +129,13 @@ export function useDeleteJobAssignment() {
 export function useCreateJob() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (job: Omit<TablesInsert<"jobs">, "job_id"> & { assigned_user_id?: string; claim_number?: string; parent_job_id?: string }) => {
+    mutationFn: async (job: Omit<TablesInsert<"jobs">, "job_id"> & {
+      assigned_user_id?: string;
+      claim_number?: string;
+      parent_job_id?: string;
+      job_type?: "insurance" | "cash";
+      estimate_amount?: number;
+    }) => {
       const { assigned_user_id, ...jobData } = job;
       const { data, error } = await supabase
         .from("jobs")

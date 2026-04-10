@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useJob, useUpdateJob, useAppointments, useJobAssignments, useCreateJobAssignment, useDeleteJobAssignment, useSubJobs, useSoftDeleteJob } from "@/hooks/useJobs";
 import { CreateJobModal } from "@/components/jobs/CreateJobModal";
@@ -36,8 +36,11 @@ import type { Qualification } from "@/hooks/useJobProduction";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useJobStatuses } from "@/hooks/useCustomizations";
+import { formatSupabaseErr } from "@/hooks/useDocuments";
 import { format } from "date-fns";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { EditJobModal } from "@/components/jobs/EditJobModal";
+import { resolveJobsBackPath, type JobNavigationState } from "@/lib/jobNavigation";
 
 // Status labels/list from flow_stages (job_status flow)
 
@@ -51,6 +54,7 @@ const ASSIGNMENT_ROLES = [
 export default function JobDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { data: job, isLoading } = useJob(id);
   const { data: appointments = [] } = useAppointments(id);
   const { data: assignments = [] } = useJobAssignments(id);
@@ -95,6 +99,7 @@ export default function JobDetail() {
   // Trade editing
   const [tradesModalOpen, setTradesModalOpen] = useState(false);
   const [selectedTrades, setSelectedTrades] = useState<string[]>([]);
+  const [editJobOpen, setEditJobOpen] = useState(false);
 
   // AI claim prediction
   const [aiPrediction, setAiPrediction] = useState<{ prediction: string; confidence: string; estimated_days: number } | null>(null);
@@ -104,6 +109,8 @@ export default function JobDetail() {
   const isSubJob = !!job && !!(job as any).parent_job_id;
   const isMainJob = !!job && !isSubJob;
   const { data: subJobsList = [] } = useSubJobs(isMainJob ? job?.id : undefined);
+  const navState = (location.state as JobNavigationState | null) ?? null;
+  const backToJobsPath = resolveJobsBackPath(navState);
 
   const handleAiPredict = useCallback(async () => {
     if (!job) return;
@@ -155,7 +162,7 @@ export default function JobDetail() {
       <AppLayout>
         <div className="text-center py-20">
           <p className="text-muted-foreground">Job not found</p>
-          <Button variant="ghost" onClick={() => navigate("/jobs")} className="mt-4">
+          <Button variant="ghost" onClick={() => navigate(backToJobsPath)} className="mt-4">
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Jobs
           </Button>
         </div>
@@ -165,6 +172,8 @@ export default function JobDetail() {
 
   const customer = job.customers as any;
   const financials = job.financials as any;
+  const jobType = ((job as any).job_type ?? "insurance") as "insurance" | "cash";
+  const estimateAmount = Number((job as any).estimate_amount ?? financials?.acv ?? 0);
   const dates = job.dates as any;
   const siteAddress = job.site_address as any;
 
@@ -214,6 +223,7 @@ export default function JobDetail() {
     try {
       await updateJob.mutateAsync({
         id: job.id,
+        estimate_amount: jobType === "cash" ? parseFloat(editAcv) || 0 : (job as any).estimate_amount ?? 0,
         financials: { acv: parseFloat(editAcv) || 0, rcv: parseFloat(editRcv) || 0 },
       });
       setShowFinEdit(false);
@@ -302,14 +312,14 @@ export default function JobDetail() {
         {/* Back + Header */}
         <div className="mb-6">
           <BattleTooltip phraseKey="back_to_jobs">
-            <Button variant="ghost" size="sm" onClick={() => navigate("/jobs")} className="mb-3">
+            <Button variant="ghost" size="sm" onClick={() => navigate(backToJobsPath)} className="mb-3">
               <ArrowLeft className="mr-2 h-4 w-4" /> Back to Jobs
             </Button>
           </BattleTooltip>
           {isSubJob && parentJobId && (
             <BattleTooltip phraseKey="back_to_main_job">
               <div className="mb-2">
-                <Link to={`/operations/${parentJobId}`} className="text-xs text-accent hover:underline">
+                <Link to={`/operations/${parentJobId}`} state={navState} className="text-xs text-accent hover:underline">
                   ← Back to Main Job
                 </Link>
               </div>
@@ -329,7 +339,7 @@ export default function JobDetail() {
                       variant="default"
                       size="xs"
                       className="h-7 px-2 text-[11px] font-mono"
-                      onClick={() => navigate(`/operations/${job.id}`)}
+                      onClick={() => navigate(`/operations/${job.id}`, { state: navState })}
                     >
                       Main · {job.job_id}
                     </Button>
@@ -340,7 +350,7 @@ export default function JobDetail() {
                         variant="outline"
                         size="xs"
                         className="h-7 px-2 text-[11px] font-mono"
-                        onClick={() => navigate(`/operations/${sub.id}`)}
+                        onClick={() => navigate(`/operations/${sub.id}`, { state: navState })}
                       >
                         Sub · {sub.job_id}
                       </Button>
@@ -352,9 +362,9 @@ export default function JobDetail() {
                  <Link to={`/customers/${job.customer_id}`} className="hover:underline text-foreground font-medium">
                    {customer?.name ?? "Unknown Customer"}
                  </Link>
-                 {(job as any).claim_number && (
+                {(job as any).claim_number && (
                    <span className="ml-2">
-                     {isMainJob && editClaimNumber === null ? (
+                    {isMainJob && editClaimNumber === null && jobType === "insurance" ? (
                        <button
                          className="text-xs text-muted-foreground hover:text-foreground font-mono bg-muted px-1.5 py-0.5 rounded cursor-pointer"
                          onClick={() => setEditClaimNumber((job as any).claim_number || "")}
@@ -362,7 +372,7 @@ export default function JobDetail() {
                        >
                          Claim# {(job as any).claim_number}
                        </button>
-                     ) : isMainJob && editClaimNumber !== null ? (
+                    ) : isMainJob && editClaimNumber !== null && jobType === "insurance" ? (
                        <span className="inline-flex items-center gap-1">
                          <Input
                            value={editClaimNumber}
@@ -397,8 +407,10 @@ export default function JobDetail() {
                          </Button>
                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setEditClaimNumber(null)}>✕</Button>
                        </span>
-                     ) : (
-                       <span className="text-xs text-muted-foreground font-mono">Claim# {(job as any).claim_number}</span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground font-mono">
+                        {jobType === "cash" ? "Cash Ref" : "Claim#"} {(job as any).claim_number}
+                      </span>
                      )}
                    </span>
                  )}
@@ -408,6 +420,9 @@ export default function JobDetail() {
                </p>
              </div>
              <div className="flex gap-1.5 items-center flex-wrap">
+               <Button variant="outline" size="sm" onClick={() => setEditJobOpen(true)}>
+                 Edit Job
+               </Button>
                 <TradesBadges trades={job.trade_types ?? []} size="sm" />
                 <BattleTooltip phraseKey="forge_trades">
                   <Button variant="ghost" size="sm" className="min-h-[44px] sm:min-h-0 h-7 px-2 text-xs" onClick={() => { setTradesModalOpen(true); setSelectedTrades(job.trade_types ?? []); }}>
@@ -530,6 +545,8 @@ export default function JobDetail() {
             />
             <FinancialsCard
               financials={financials} showEdit={showFinEdit}
+              jobType={jobType}
+              estimateAmount={estimateAmount}
               editAcv={editAcv} editRcv={editRcv}
               onToggleEdit={() => { setShowFinEdit(!showFinEdit); setEditAcv(String(financials?.acv ?? 0)); setEditRcv(String(financials?.rcv ?? 0)); }}
               onAcvChange={setEditAcv} onRcvChange={setEditRcv} onSave={handleSaveFinancials}
@@ -613,7 +630,11 @@ export default function JobDetail() {
                       </thead>
                       <tbody>
                         {subJobsList.map((sub: any) => (
-                          <tr key={sub.id} className="border-b cursor-pointer hover:bg-muted/40" onClick={() => navigate(`/operations/${sub.id}`)}>
+                          <tr
+                            key={sub.id}
+                            className="border-b cursor-pointer hover:bg-muted/40"
+                            onClick={() => navigate(`/operations/${sub.id}`, { state: navState })}
+                          >
                             <td className="px-4 py-2 font-mono font-medium text-foreground">{sub.job_id}</td>
                             <td className="px-4 py-2">
                               <div className="flex gap-1">{sub.trade_types?.map((t: string) => <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>)}</div>
@@ -733,6 +754,8 @@ export default function JobDetail() {
               />
               <FinancialsCard
                 financials={financials} showEdit={showFinEdit}
+                jobType={jobType}
+                estimateAmount={estimateAmount}
                 editAcv={editAcv} editRcv={editRcv}
                 onToggleEdit={() => { setShowFinEdit(!showFinEdit); setEditAcv(String(financials?.acv ?? 0)); setEditRcv(String(financials?.rcv ?? 0)); }}
                 onAcvChange={setEditAcv} onRcvChange={setEditRcv} onSave={handleSaveFinancials}
@@ -784,6 +807,22 @@ export default function JobDetail() {
           </Tabs>
         </div>
       </div>
+      <EditJobModal
+        open={editJobOpen}
+        onOpenChange={setEditJobOpen}
+        job={job}
+        tradeTypes={tradeTypes}
+        isSaving={updateJob.isPending}
+        onSave={async (updates) => {
+          try {
+            await updateJob.mutateAsync(updates as any);
+            setEditJobOpen(false);
+            toast({ title: "Job updated" });
+          } catch (e: unknown) {
+            toast({ title: "Error", description: formatSupabaseErr(e), variant: "destructive" });
+          }
+        }}
+      />
     </AppLayout>
   );
 }
@@ -918,8 +957,8 @@ function AssignmentsCard({ assignments, profileMap, allProfiles, assignUserId, a
   );
 }
 
-function FinancialsCard({ financials, showEdit, editAcv, editRcv, onToggleEdit, onAcvChange, onRcvChange, onSave }: {
-  financials: any; showEdit: boolean; editAcv: string; editRcv: string;
+function FinancialsCard({ financials, showEdit, jobType, estimateAmount, editAcv, editRcv, onToggleEdit, onAcvChange, onRcvChange, onSave }: {
+  financials: any; showEdit: boolean; jobType: "insurance" | "cash"; estimateAmount: number; editAcv: string; editRcv: string;
   onToggleEdit: () => void; onAcvChange: (v: string) => void; onRcvChange: (v: string) => void; onSave: () => void;
 }) {
   return (
@@ -931,13 +970,13 @@ function FinancialsCard({ financials, showEdit, editAcv, editRcv, onToggleEdit, 
       <CardContent>
         {showEdit ? (
           <div className="space-y-3">
-            <div className="space-y-1"><Label className="text-xs">ACV</Label><Input type="number" value={editAcv} onChange={(e) => onAcvChange(e.target.value)} /></div>
+            <div className="space-y-1"><Label className="text-xs">{jobType === "cash" ? "Estimate (mirrors ACV)" : "ACV"}</Label><Input type="number" value={editAcv} onChange={(e) => onAcvChange(e.target.value)} /></div>
             <div className="space-y-1"><Label className="text-xs">RCV</Label><Input type="number" value={editRcv} onChange={(e) => onRcvChange(e.target.value)} /></div>
             <Button size="sm" onClick={onSave} className="w-full"><Save className="mr-2 h-3 w-3" /> Save</Button>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-4">
-            <div><p className="text-xs text-muted-foreground">ACV</p><p className="text-lg font-bold text-foreground">${(financials?.acv ?? 0).toLocaleString()}</p></div>
+            <div><p className="text-xs text-muted-foreground">{jobType === "cash" ? "Estimate" : "ACV"}</p><p className="text-lg font-bold text-foreground">${(jobType === "cash" ? estimateAmount : (financials?.acv ?? 0)).toLocaleString()}</p></div>
             <div><p className="text-xs text-muted-foreground">RCV</p><p className="text-lg font-bold text-foreground">${(financials?.rcv ?? 0).toLocaleString()}</p></div>
           </div>
         )}

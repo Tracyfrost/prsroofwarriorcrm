@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useUpdateSiteCamMedia, getMediaUrl, type SiteCamMedia } from "@/hooks/useSiteCam";
 import { supabase } from "@/integrations/supabase/client";
-import { X, Pencil, Square, Circle, Type, ArrowRight, Undo, Redo, Save, Loader2, Eraser, Palette } from "lucide-react";
+import { X, Pencil, Square, Circle, Type, ArrowRight, Undo, Redo, Save, Loader2, Eraser } from "lucide-react";
 
 interface AnnotationEditorProps {
   media: SiteCamMedia;
@@ -100,13 +100,29 @@ export function AnnotationEditor({ media, onClose }: AnnotationEditorProps) {
     setHistoryIndex(newIndex);
   };
 
+  const getClientPoint = (e: React.MouseEvent | React.TouchEvent): { clientX: number; clientY: number } | null => {
+    if ("touches" in e) {
+      if (e.touches.length > 0) {
+        return { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
+      }
+      if (e.type === "touchend" || e.type === "touchcancel") {
+        const ch = (e as React.TouchEvent).changedTouches;
+        if (ch.length > 0) {
+          return { clientX: ch[0].clientX, clientY: ch[0].clientY };
+        }
+      }
+      return null;
+    }
+    return { clientX: e.clientX, clientY: e.clientY };
+  };
+
   const getPos = (e: React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
+    const pt = getClientPoint(e);
+    if (!pt) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
-    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
-    return { x: clientX - rect.left, y: clientY - rect.top };
+    return { x: pt.clientX - rect.left, y: pt.clientY - rect.top };
   };
 
   const handlePointerDown = (e: React.MouseEvent | React.TouchEvent) => {
@@ -128,6 +144,9 @@ export function AnnotationEditor({ media, onClose }: AnnotationEditorProps) {
 
   const handlePointerMove = (e: React.MouseEvent | React.TouchEvent) => {
     if (!drawing) return;
+    if ("touches" in e && e.touches.length > 0) {
+      e.preventDefault();
+    }
     const pos = getPos(e);
     const ctx = canvasRef.current?.getContext("2d");
     if (!ctx) return;
@@ -234,31 +253,39 @@ export function AnnotationEditor({ media, onClose }: AnnotationEditorProps) {
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col">
-      <div className="flex items-center justify-between p-2 border-b border-border bg-card">
-        <div className="flex items-center gap-1">
+      <div className="flex flex-col gap-2 border-b border-border bg-card p-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-2 sm:gap-y-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {tools.map(t => (
-            <Button key={t.id} variant={tool === t.id ? "default" : "ghost"} size="sm" onClick={() => setTool(t.id)} title={t.label} className="h-8 w-8 p-0">
+            <Button key={t.id} variant={tool === t.id ? "default" : "ghost"} size="sm" onClick={() => setTool(t.id)} title={t.label} className="h-8 w-8 shrink-0 p-0">
               <t.icon className="h-4 w-4" />
             </Button>
           ))}
-          <div className="w-px h-6 bg-border mx-1" />
-          <Button variant="ghost" size="sm" onClick={undo} disabled={historyIndex <= 0} className="h-8 w-8 p-0"><Undo className="h-4 w-4" /></Button>
-          <Button variant="ghost" size="sm" onClick={redo} disabled={historyIndex >= history.length - 1} className="h-8 w-8 p-0"><Redo className="h-4 w-4" /></Button>
+          <div className="mx-1 hidden h-6 w-px shrink-0 bg-border sm:block" />
+          <Button variant="ghost" size="sm" onClick={undo} disabled={historyIndex <= 0} className="h-8 w-8 shrink-0 p-0"><Undo className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="sm" onClick={redo} disabled={historyIndex >= history.length - 1} className="h-8 w-8 shrink-0 p-0"><Redo className="h-4 w-4" /></Button>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {COLORS.map(c => (
-            <button key={c} onClick={() => setColor(c)} className={`h-6 w-6 rounded-full border-2 transition-transform ${color === c ? "border-foreground scale-125" : "border-transparent"}`} style={{ backgroundColor: c }} />
+            <button
+              key={c}
+              type="button"
+              onClick={() => setColor(c)}
+              className={`h-6 w-6 shrink-0 rounded-full border-2 transition-transform ${color === c ? "border-foreground scale-125" : "border-transparent"}`}
+              style={{ backgroundColor: c }}
+            />
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <select value={lineWidth} onChange={e => setLineWidth(Number(e.target.value))} className="h-8 text-xs bg-muted rounded px-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <select value={lineWidth} onChange={e => setLineWidth(Number(e.target.value))} className="h-8 shrink-0 rounded bg-muted px-2 text-xs">
             <option value={1}>Thin</option>
             <option value={3}>Medium</option>
             <option value={5}>Thick</option>
             <option value={8}>Heavy</option>
           </select>
-          <Button variant="outline" size="sm" onClick={onClose}><X className="mr-1 h-3.5 w-3.5" /> Cancel</Button>
-          <Button size="sm" onClick={handleSave} disabled={saving}>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={onClose}>
+            <X className="mr-1 h-3.5 w-3.5" /> Cancel
+          </Button>
+          <Button size="sm" className="shrink-0" onClick={handleSave} disabled={saving}>
             {saving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />}
             Save
           </Button>
@@ -270,13 +297,14 @@ export function AnnotationEditor({ media, onClose }: AnnotationEditorProps) {
         )}
         <canvas
           ref={canvasRef}
-          className={`rounded shadow-lg cursor-crosshair ${!imageLoaded ? "hidden" : ""}`}
+          className={`touch-none rounded shadow-lg cursor-crosshair ${!imageLoaded ? "hidden" : ""}`}
           onMouseDown={handlePointerDown}
           onMouseMove={handlePointerMove}
           onMouseUp={handlePointerUp}
           onTouchStart={handlePointerDown}
           onTouchMove={handlePointerMove}
           onTouchEnd={handlePointerUp}
+          onTouchCancel={handlePointerUp}
         />
       </div>
     </div>

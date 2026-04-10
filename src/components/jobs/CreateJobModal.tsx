@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -20,6 +20,7 @@ import {
 import {
   Form, FormField, FormItem, FormLabel, FormControl, FormMessage,
 } from "@/components/ui/form";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { BattleTooltip } from "@/components/BattleTooltip";
@@ -34,13 +35,20 @@ const claimSchema = z.string()
 const jobSchema = z.object({
   customer_id: z.string().min(1, "Customer is required"),
   trade_types: z.array(z.string()).min(1, "Select at least one trade type"),
+  job_type: z.enum(["insurance", "cash"]).default("insurance"),
+  estimate_amount: z.coerce.number().min(0).default(0),
   status: z.string().default("lead"),
   notes: z.string().max(2000).optional(),
   claim_number: z.string().optional(),
   is_sub_job: z.boolean().default(false),
   parent_job_id: z.string().optional(),
+  jobsite_same_as_customer: z.boolean().default(true),
+  site_street: z.string().optional(),
+  site_city: z.string().optional(),
+  site_state: z.string().optional(),
+  site_zip: z.string().optional(),
 }).superRefine((data, ctx) => {
-  if (!data.is_sub_job && data.claim_number && data.claim_number.trim() !== "") {
+  if (!data.is_sub_job && data.job_type === "insurance" && data.claim_number && data.claim_number.trim() !== "") {
     const result = claimSchema.safeParse(data.claim_number.trim());
     if (!result.success) {
       result.error.issues.forEach((issue) => {
@@ -70,7 +78,7 @@ export function CreateJobModal({ defaultCustomerId, defaultParentJobId, trigger 
   const { data: customers = [] } = useQuery({
     queryKey: ["customers-list"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("customers").select("id, name").order("name");
+      const { data, error } = await supabase.from("customers").select("id, name, main_address").order("name");
       if (error) throw error;
       return data ?? [];
     },
@@ -83,19 +91,29 @@ export function CreateJobModal({ defaultCustomerId, defaultParentJobId, trigger 
     defaultValues: {
       customer_id: defaultCustomerId ?? "",
       trade_types: [],
+      job_type: "insurance",
+      estimate_amount: 0,
       status: "lead",
       notes: "",
       claim_number: "",
       is_sub_job: subJobModeAvailable,
       parent_job_id: defaultParentJobId ?? "",
+      jobsite_same_as_customer: true,
+      site_street: "",
+      site_city: "",
+      site_state: "",
+      site_zip: "",
     },
   });
 
   const watchTrades = form.watch("trade_types");
   const isSubJob = subJobModeAvailable;
   const selectedCustomerId = form.watch("customer_id");
+  const jobsiteSameAsCustomer = form.watch("jobsite_same_as_customer");
+  const jobType = form.watch("job_type");
   const claimNumber = form.watch("claim_number");
   const parentJobId = form.watch("parent_job_id");
+  const selectedCustomer = customers.find((c: any) => c.id === selectedCustomerId) as any;
 
   // Filter main jobs by selected customer
   const customerMainJobs = mainJobs.filter((j) => j.customer_id === selectedCustomerId);
@@ -104,9 +122,20 @@ export function CreateJobModal({ defaultCustomerId, defaultParentJobId, trigger 
   const selectedParent = mainJobs.find((j) => j.id === parentJobId);
   const previewJobId = isSubJob && selectedParent
     ? `PRS-${(selectedParent as any).claim_number}-?`
-    : claimNumber
+    : jobType === "cash"
+      ? "PRS-CSH-[auto]"
+      : claimNumber
       ? `PRS-${claimNumber}`
       : "PRS-[auto]";
+
+  useEffect(() => {
+    if (!jobsiteSameAsCustomer) return;
+    const addr = (selectedCustomer?.main_address ?? {}) as any;
+    form.setValue("site_street", addr?.street ?? "");
+    form.setValue("site_city", addr?.city ?? "");
+    form.setValue("site_state", addr?.state ?? "");
+    form.setValue("site_zip", addr?.zip ?? "");
+  }, [form, jobsiteSameAsCustomer, selectedCustomer]);
 
   const toggleTrade = (trade: string) => {
     const lower = trade.toLowerCase();
@@ -123,16 +152,26 @@ export function CreateJobModal({ defaultCustomerId, defaultParentJobId, trigger 
       const jobPayload: any = {
         customer_id: values.customer_id,
         trade_types: values.trade_types,
+        job_type: values.job_type,
+        estimate_amount: values.job_type === "cash" ? values.estimate_amount : 0,
         status: values.status as any,
         notes: values.notes || "",
         sales_rep_id: user?.id,
         assigned_user_id: user?.id,
+        site_address: values.jobsite_same_as_customer
+          ? ((selectedCustomer?.main_address ?? {}) as any)
+          : {
+              street: values.site_street?.trim() ?? "",
+              city: values.site_city?.trim() ?? "",
+              state: values.site_state?.trim() ?? "",
+              zip: values.site_zip?.trim() ?? "",
+            },
       };
 
       if (creatingSubJob) {
         jobPayload.parent_job_id = values.parent_job_id;
         // customer_id will be inherited by trigger
-      } else if (values.claim_number?.trim()) {
+      } else if (values.job_type === "insurance" && values.claim_number?.trim()) {
         jobPayload.claim_number = values.claim_number.trim();
         jobPayload.parent_job_id = null;
       } else {
@@ -154,7 +193,30 @@ export function CreateJobModal({ defaultCustomerId, defaultParentJobId, trigger 
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) form.reset({ customer_id: defaultCustomerId ?? "", trade_types: [], status: "lead", notes: "", claim_number: "", is_sub_job: subJobModeAvailable, parent_job_id: defaultParentJobId ?? "" }); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (!v) {
+          form.reset({
+            customer_id: defaultCustomerId ?? "",
+            trade_types: [],
+            job_type: "insurance",
+            estimate_amount: 0,
+            status: "lead",
+            notes: "",
+            claim_number: "",
+            is_sub_job: subJobModeAvailable,
+            parent_job_id: defaultParentJobId ?? "",
+            jobsite_same_as_customer: true,
+            site_street: "",
+            site_city: "",
+            site_state: "",
+            site_zip: "",
+          });
+        }
+      }}
+    >
       <DialogTrigger asChild>
         {trigger ?? <Button><Plus className="mr-2 h-4 w-4" /> Add Job</Button>}
       </DialogTrigger>
@@ -209,16 +271,73 @@ export function CreateJobModal({ defaultCustomerId, defaultParentJobId, trigger 
                   render={({ field }) => (
                     <BattleTooltip phraseKey="claim_number_field">
                       <FormItem>
-                        <FormLabel>Claim # (optional)</FormLabel>
+                        <FormLabel>Job Type</FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="e.g. 12T45 (5-20 chars, A-Z 0-9 - _ .)" maxLength={20} />
+                          <Select value={jobType} onValueChange={(v) => form.setValue("job_type", v as "insurance" | "cash")}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="insurance">Insurance job</SelectItem>
+                              <SelectItem value="cash">Cash job (retail / scheme)</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </FormControl>
-                        <p className="text-xs text-muted-foreground">Insurance claim number. 5-20 alphanumeric chars. Leave blank to auto-generate.</p>
                         <FormMessage />
                       </FormItem>
                     </BattleTooltip>
                   )}
                 />
+
+                <FormField
+                  control={form.control}
+                  name="claim_number"
+                  render={({ field }) => (
+                    <BattleTooltip phraseKey="claim_number_field">
+                      <FormItem>
+                        <FormLabel>{jobType === "cash" ? "Cash Ref" : "Claim # (optional)"}</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            placeholder={jobType === "cash" ? "Auto-generated (CSH-####)" : "e.g. 12T45 (5-20 chars, A-Z 0-9 - _ .)"}
+                            maxLength={20}
+                            disabled={jobType === "cash"}
+                            value={jobType === "cash" ? "CSH-[auto]" : field.value}
+                          />
+                        </FormControl>
+                        <p className="text-xs text-muted-foreground">
+                          {jobType === "cash"
+                            ? "Cash jobs get an auto-generated CSH reference."
+                            : "Insurance claim number. 5-20 alphanumeric chars. Leave blank to auto-generate."}
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    </BattleTooltip>
+                  )}
+                />
+
+                {jobType === "cash" && (
+                  <FormField
+                    control={form.control}
+                    name="estimate_amount"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Estimate Amount</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={field.value ?? 0}
+                            onChange={(e) => field.onChange(e.target.value)}
+                          />
+                        </FormControl>
+                        <p className="text-xs text-muted-foreground">For cash jobs this mirrors ACV automatically.</p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
               </>
             ) : (
               <>
@@ -327,6 +446,80 @@ export function CreateJobModal({ defaultCustomerId, defaultParentJobId, trigger 
                 </BattleTooltip>
               )}
             />
+
+            <div className="space-y-3 rounded-md border p-3">
+              <FormLabel>Jobsite Address</FormLabel>
+              <FormField
+                control={form.control}
+                name="jobsite_same_as_customer"
+                render={({ field }) => (
+                  <FormItem className="flex items-center gap-2 space-y-0">
+                    <FormControl>
+                      <Checkbox checked={field.value} onCheckedChange={(checked) => field.onChange(!!checked)} />
+                    </FormControl>
+                    <FormLabel className="font-normal">Same as Customer Address</FormLabel>
+                  </FormItem>
+                )}
+              />
+              {jobsiteSameAsCustomer ? (
+                <p className="text-xs text-muted-foreground">
+                  {selectedCustomer?.main_address?.street
+                    ? `${selectedCustomer.main_address.street}, ${selectedCustomer.main_address.city || ""} ${selectedCustomer.main_address.state || ""} ${selectedCustomer.main_address.zip || ""}`.trim()
+                    : "Customer address will be used when available."}
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                  <FormField
+                    control={form.control}
+                    name="site_street"
+                    render={({ field }) => (
+                      <FormItem className="sm:col-span-2">
+                        <FormLabel>Street</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="Street" />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="site_city"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>City</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="City" />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="site_state"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>State</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="State" />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="site_zip"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>ZIP</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="ZIP" />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
+            </div>
 
             <FormField
               control={form.control}

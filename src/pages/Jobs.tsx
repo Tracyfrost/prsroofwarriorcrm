@@ -18,6 +18,7 @@ import { useJobStatuses, type JobStatus } from "@/hooks/useCustomizations";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { BattleTooltip } from "@/components/BattleTooltip";
+import { jobsListState } from "@/lib/jobNavigation";
 
 function statusLabel(name: string, defs: JobStatus[]) {
   return defs.find((d) => d.name === name)?.display_name ?? name;
@@ -26,6 +27,16 @@ function statusLabel(name: string, defs: JobStatus[]) {
 function statusAccentStyle(defs: JobStatus[], name: string): CSSProperties | undefined {
   const c = defs.find((d) => d.name === name)?.color;
   return c ? { borderLeftWidth: 4, borderLeftStyle: "solid", borderLeftColor: c } : undefined;
+}
+
+function claimSlot(job: Job): string {
+  if ((job as any).job_type === "cash") return (job as any).claim_number || "CSH";
+  return (job as any).claim_number || "—";
+}
+
+function estimateValue(job: Job): number {
+  if ((job as any).job_type === "cash") return Number((job as any).estimate_amount ?? (job.financials as any)?.acv ?? 0);
+  return Number((job.financials as any)?.acv ?? 0);
 }
 
 export default function Jobs() {
@@ -41,6 +52,8 @@ export default function Jobs() {
   const { toast } = useToast();
 
   usePageTitle("Jobs");
+
+  const openJob = (id: string) => navigate(`/operations/${id}`, { state: jobsListState() });
 
   const handleStatusChange = async (jobId: string, newStatus: string) => {
     try {
@@ -116,12 +129,12 @@ export default function Jobs() {
             jobStatuses={jobStatuses}
             boardColumns={boardColumns}
             onStatusChange={handleStatusChange}
-            onJobClick={(id) => navigate(`/operations/${id}`)}
+            onJobClick={openJob}
           />
         ) : isMobile ? (
-          <JobCardList jobs={filtered} jobStatuses={jobStatuses} onJobClick={(id) => navigate(`/operations/${id}`)} />
+          <JobCardList jobs={filtered} jobStatuses={jobStatuses} onJobClick={openJob} />
         ) : (
-          <JobTable jobs={filtered} jobStatuses={jobStatuses} onJobClick={(id) => navigate(`/operations/${id}`)} />
+          <JobTable jobs={filtered} jobStatuses={jobStatuses} onJobClick={openJob} />
         )}
       </PageWrapper>
     </AppLayout>
@@ -186,9 +199,10 @@ function KanbanBoard({ jobs, jobStatuses, boardColumns, onStatusChange, onJobCli
                     )}
                     {(job.financials as any)?.acv > 0 && (
                       <p className="mt-2 text-xs font-medium text-foreground">
-                        ACV: ${((job.financials as any).acv).toLocaleString()}
+                        {(job as any).job_type === "cash" ? "Estimate" : "ACV"}: ${estimateValue(job).toLocaleString()}
                       </p>
                     )}
+                    <p className="mt-1 text-[11px] text-muted-foreground font-mono">Ref: {claimSlot(job)}</p>
                   </CardContent>
                 </Card>
               ))}
@@ -232,9 +246,10 @@ function JobCardList({ jobs, jobStatuses, onJobClick }: { jobs: Job[]; jobStatus
                 <p className="font-medium text-foreground mt-1 truncate">{j.customers?.name ?? "Unknown"}</p>
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                   {j.trade_types?.length ? <span>{j.trade_types.join(", ")}</span> : null}
-                  {(j.financials as any)?.acv > 0 && (
-                    <span className="font-medium text-foreground">ACV: ${((j.financials as any).acv).toLocaleString()}</span>
+                  {estimateValue(j) > 0 && (
+                    <span className="font-medium text-foreground">{(j as any).job_type === "cash" ? "Estimate" : "ACV"}: ${estimateValue(j).toLocaleString()}</span>
                   )}
+                  <span className="font-mono">Ref: {claimSlot(j)}</span>
                   <span>{new Date(j.created_at).toLocaleDateString()}</span>
                 </div>
               </div>
@@ -257,14 +272,15 @@ function JobTable({ jobs, jobStatuses, onJobClick }: { jobs: Job[]; jobStatuses:
               <TableHead>Customer</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Trades</TableHead>
-              <TableHead>ACV</TableHead>
+              <TableHead>Ref</TableHead>
+              <TableHead>Amount</TableHead>
               <TableHead>Created</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {jobs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No jobs found</TableCell>
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No jobs found</TableCell>
               </TableRow>
             ) : (
               jobs.map((j) => (
@@ -280,7 +296,8 @@ function JobTable({ jobs, jobStatuses, onJobClick }: { jobs: Job[]; jobStatuses:
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{j.trade_types?.join(", ") || "—"}</TableCell>
-                  <TableCell className="text-sm">{(j.financials as any)?.acv > 0 ? `$${(j.financials as any).acv.toLocaleString()}` : "—"}</TableCell>
+                  <TableCell className="text-sm font-mono">{claimSlot(j)}</TableCell>
+                  <TableCell className="text-sm">{estimateValue(j) > 0 ? `$${estimateValue(j).toLocaleString()}` : "—"}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{new Date(j.created_at).toLocaleDateString()}</TableCell>
                 </TableRow>
               ))

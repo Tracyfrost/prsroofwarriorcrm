@@ -1043,10 +1043,12 @@ export type Database = {
           customer_id: string
           dates: Json
           deleted_at: string | null
+          estimate_amount: number
           financials: Json
           has_supplement: boolean | null
           id: string
           job_id: string
+          job_type: string
           notes: string | null
           number_of_squares: number | null
           squares_estimated: number | null
@@ -1071,10 +1073,12 @@ export type Database = {
           customer_id: string
           dates?: Json
           deleted_at?: string | null
+          estimate_amount?: number
           financials?: Json
           has_supplement?: boolean | null
           id?: string
           job_id: string
+          job_type?: string
           notes?: string | null
           number_of_squares?: number | null
           squares_estimated?: number | null
@@ -1099,10 +1103,12 @@ export type Database = {
           customer_id?: string
           dates?: Json
           deleted_at?: string | null
+          estimate_amount?: number
           financials?: Json
           has_supplement?: boolean | null
           id?: string
           job_id?: string
+          job_type?: string
           notes?: string | null
           number_of_squares?: number | null
           squares_estimated?: number | null
@@ -1707,6 +1713,7 @@ export type Database = {
           caption: string | null
           comments: Json | null
           created_at: string
+          folder_id: string | null
           id: string
           is_public: boolean | null
           job_id: string
@@ -1724,6 +1731,7 @@ export type Database = {
           caption?: string | null
           comments?: Json | null
           created_at?: string
+          folder_id?: string | null
           id?: string
           is_public?: boolean | null
           job_id: string
@@ -1741,6 +1749,7 @@ export type Database = {
           caption?: string | null
           comments?: Json | null
           created_at?: string
+          folder_id?: string | null
           id?: string
           is_public?: boolean | null
           job_id?: string
@@ -1754,10 +1763,56 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "sitecam_media_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "sitecam_folders"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "sitecam_media_job_id_fkey"
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sitecam_folders: {
+        Row: {
+          created_at: string
+          id: string
+          job_id: string
+          name: string
+          parent_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          job_id: string
+          name: string
+          parent_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          job_id?: string
+          name?: string
+          parent_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sitecam_folders_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sitecam_folders_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "sitecam_folders"
             referencedColumns: ["id"]
           },
         ]

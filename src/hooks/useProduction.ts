@@ -165,6 +165,25 @@ export function useUpdateTradeType() {
   });
 }
 
+export function useBulkUpdateTradeTypeOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (rows: { id: string; sort_order: number }[]) => {
+      for (const row of rows) {
+        const { error } = await supabase
+          .from("trade_types")
+          .update({ sort_order: row.sort_order } as any)
+          .eq("id", row.id);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["trade-types"] });
+      qc.invalidateQueries({ queryKey: ["trade-types-all"] });
+    },
+  });
+}
+
 export function useProductionItems(jobId?: string) {
   return useQuery({
     queryKey: ["production-items", jobId],

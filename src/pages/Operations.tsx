@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,7 @@ import { ResponsiveModal } from "@/components/ui/responsive-modal";
 import { AddressLink } from "@/components/AddressLink";
 import { CreateJobModal } from "@/components/jobs/CreateJobModal";
 import { SiteCamGallery } from "@/components/sitecam/SiteCamGallery";
+import { EditJobModal } from "@/components/jobs/EditJobModal";
 import { ProductionSection } from "@/components/production/ProductionSection";
 import { DualWorkflowStatusBar } from "@/components/job/DualWorkflowStatusBar";
 import MilestonesMainTab from "@/components/job/MilestonesMainTab";
@@ -45,6 +46,7 @@ import { useStatusBranches } from "@/hooks/useStatusBranches";
 import { useJobStatuses } from "@/hooks/useCustomizations";
 import { useUserRoles } from "@/hooks/useProfile";
 import { useToast } from "@/hooks/use-toast";
+import { formatSupabaseErr } from "@/hooks/useDocuments";
 import type { Qualification } from "@/hooks/useJobProduction";
 import { JobAppointmentsBlock } from "@/components/appointments/JobAppointmentsBlock";
 import {
@@ -52,6 +54,7 @@ import {
   Camera,
   DollarSign,
   Hammer,
+  Pencil,
   Plus,
   Save,
   Trash2,
@@ -59,6 +62,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { resolveJobsBackPath, type JobNavigationState } from "@/lib/jobNavigation";
 
 const ASSIGNMENT_ROLES = [
   { value: "primary_rep", label: "Primary Rep" },
@@ -72,9 +76,19 @@ const FLOW_STAGES = ["lead", "inspected", "approved", "scheduled", "completed", 
 const currency = (value: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value || 0);
 
+/** Matches AddressLink: maps link only renders when street or city is non-empty. */
+function addressHasStreetOrCity(addr: unknown): boolean {
+  if (!addr || typeof addr !== "object") return false;
+  const a = addr as Record<string, unknown>;
+  const street = String(a.street ?? "").trim();
+  const city = String(a.city ?? "").trim();
+  return Boolean(street || city);
+}
+
 export default function Operations() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const { data: job, isLoading } = useJob(id);
   const { data: assignments = [] } = useJobAssignments(id);
@@ -96,9 +110,13 @@ export default function Operations() {
   const [notesDraft, setNotesDraft] = useState<string | null>(null);
   const [tradesModalOpen, setTradesModalOpen] = useState(false);
   const [selectedTrades, setSelectedTrades] = useState<string[]>([]);
+  const [editJobOpen, setEditJobOpen] = useState(false);
   const isSubJob = !!job && !!(job as any).parent_job_id;
   const isMainJob = !!job && !isSubJob;
   const { data: subJobsList = [] } = useSubJobs(isMainJob ? job?.id : undefined);
+
+  const navState = (location.state as JobNavigationState | null) ?? null;
+  const backToJobsPath = resolveJobsBackPath(navState);
 
   if (isLoading) {
     return (
@@ -115,7 +133,7 @@ export default function Operations() {
       <AppLayout>
         <div className="py-20 text-center">
           <p className="text-muted-foreground">Job not found</p>
-          <Button variant="outline" className="mt-4" onClick={() => navigate("/jobs")}>
+          <Button variant="outline" className="mt-4" onClick={() => navigate(backToJobsPath)}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Jobs
           </Button>
@@ -126,7 +144,15 @@ export default function Operations() {
 
   const customer = (job.customers ?? {}) as any;
   const financials = (job.financials ?? {}) as any;
+  const jobType = ((job as any).job_type ?? "insurance") as "insurance" | "cash";
+  const estimateAmount = Number((job as any).estimate_amount ?? financials?.acv ?? 0);
   const siteAddress = (job.site_address ?? {}) as any;
+  const customerMainAddress = (customer?.main_address ?? {}) as any;
+  const displayJobSiteAddress = addressHasStreetOrCity(siteAddress)
+    ? siteAddress
+    : addressHasStreetOrCity(customerMainAddress)
+      ? customerMainAddress
+      : null;
 
   const profileMap = new Map(allProfiles.map((p) => [p.user_id, p]));
 
@@ -215,10 +241,21 @@ export default function Operations() {
           <div className="mx-auto max-w-7xl px-4 py-3 sm:py-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="space-y-1">
-                <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => navigate("/jobs")}>
+                <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => navigate(backToJobsPath)}>
                   <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
                   Back to Jobs
                 </Button>
+                {isSubJob && (job as any).parent_job_id && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-xs"
+                    onClick={() => navigate(`/operations/${(job as any).parent_job_id}`, { state: navState })}
+                  >
+                    <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
+                    Back to Main Job
+                  </Button>
+                )}
                 <div className="flex items-center gap-2">
                   <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{job.job_id}</h1>
                   {isSubJob && <Badge variant="secondary">Sub Job</Badge>}
@@ -227,11 +264,15 @@ export default function Operations() {
                   <Link to={`/customers/${job.customer_id}`} className="font-medium text-foreground hover:underline">
                     {customer?.name ?? "Unknown Customer"}
                   </Link>
-                  {(job as any).claim_number ? ` • Claim #${(job as any).claim_number}` : ""}
+                  {(job as any).claim_number ? ` • ${jobType === "cash" ? "Cash Ref" : "Claim #"}${(job as any).claim_number}` : ""}
                 </p>
               </div>
 
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <Button variant="outline" className="min-h-[44px]" onClick={() => setEditJobOpen(true)}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit Job
+                </Button>
                 <Button
                   variant="outline"
                   className="min-h-[44px]"
@@ -319,9 +360,9 @@ export default function Operations() {
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6 w-full">
             <TabsList className="grid h-auto w-full grid-cols-2 gap-1 md:grid-cols-5">
-              <TabsTrigger value="overview" className="min-h-[44px]">Overview</TabsTrigger>
+              <TabsTrigger value="overview" className="min-h-[44px]">Main Overview</TabsTrigger>
+              <TabsTrigger value="items" className="min-h-[44px]">War Room</TabsTrigger>
               <TabsTrigger value="milestones" className="min-h-[44px]">Milestones</TabsTrigger>
-              <TabsTrigger value="items" className="min-h-[44px]">Production Items</TabsTrigger>
               <TabsTrigger value="financials" className="min-h-[44px]">Financials</TabsTrigger>
               <TabsTrigger value="sitecam" className="min-h-[44px]">SiteCam</TabsTrigger>
             </TabsList>
@@ -343,8 +384,8 @@ export default function Operations() {
                       </div>
                       <div className="space-y-2">
                         <p className="text-xs uppercase tracking-wide text-muted-foreground">Job Site</p>
-                        {siteAddress?.street ? (
-                          <AddressLink address={siteAddress} />
+                        {displayJobSiteAddress ? (
+                          <AddressLink address={displayJobSiteAddress} />
                         ) : (
                           <p className="text-sm text-muted-foreground">No site address set</p>
                         )}
@@ -360,7 +401,7 @@ export default function Operations() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                      <MetricCard label="Total ACV" value={currency(totalAcv)} accent />
+                      <MetricCard label={jobType === "cash" ? "Total Estimate/ACV" : "Total ACV"} value={currency(totalAcv)} accent />
                       <MetricCard label="Total RCV" value={currency(totalRcv)} accent />
                       <MetricCard label="Checks Received" value={currency(checksReceived)} />
                       <MetricCard label="Variance" value={currency(variance)} warning />
@@ -465,7 +506,7 @@ export default function Operations() {
                       <button
                         key={sub.id}
                         className="flex w-full items-center justify-between rounded-lg border p-3 text-left hover:bg-muted/40"
-                        onClick={() => navigate(`/operations/${sub.id}`)}
+                        onClick={() => navigate(`/operations/${sub.id}`, { state: navState })}
                       >
                         <div>
                           <p className="font-medium">{sub.job_id}</p>
@@ -538,6 +579,7 @@ export default function Operations() {
                 isMainJob={isMainJob}
                 parentClaimNumber={isSubJob ? (job as any).claim_number : null}
                 carrierFromCustomer={customer?.insurance_carrier ?? null}
+                subNavGreenGlow={activeTab === "items"}
               />
             </TabsContent>
 
@@ -547,7 +589,7 @@ export default function Operations() {
                   <CardTitle>Financial Breakdown</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <MetricCard label="Own ACV" value={currency(ownAcv)} />
+                  <MetricCard label={jobType === "cash" ? "Own Estimate/ACV" : "Own ACV"} value={currency(jobType === "cash" ? estimateAmount : ownAcv)} />
                   <MetricCard label="Own RCV" value={currency(ownRcv)} />
                   <MetricCard label="Sub Jobs ACV" value={currency(subsAcv)} />
                   <MetricCard label="Sub Jobs RCV" value={currency(subsRcv)} />
@@ -603,6 +645,22 @@ export default function Operations() {
           Save Trades
         </Button>
       </ResponsiveModal>
+      <EditJobModal
+        open={editJobOpen}
+        onOpenChange={setEditJobOpen}
+        job={job}
+        tradeTypes={tradeTypes}
+        isSaving={updateJob.isPending}
+        onSave={async (updates) => {
+          try {
+            await updateJob.mutateAsync(updates as any);
+            setEditJobOpen(false);
+            toast({ title: "Job updated" });
+          } catch (error: unknown) {
+            toast({ title: "Error", description: formatSupabaseErr(error), variant: "destructive" });
+          }
+        }}
+      />
     </AppLayout>
   );
 }

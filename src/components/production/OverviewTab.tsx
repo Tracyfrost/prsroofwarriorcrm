@@ -1,13 +1,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { MILESTONE_KEYS, type Qualification } from "@/hooks/useJobProduction";
+import { type Qualification } from "@/hooks/useJobProduction";
 import type { PaymentCheck } from "@/hooks/usePaymentChecks";
 import { parseScopeMetadata, type ProductionItem } from "@/hooks/useProduction";
 import type { JobExpense } from "@/hooks/useJobExpenses";
 import type { JobTracking } from "@/hooks/useJobTracking";
 import type { Draw } from "@/hooks/useDraws";
-import { useProductionItemStatuses } from "@/hooks/useCustomizations";
+import { useProductionItemStatuses, useProductionMilestones } from "@/hooks/useCustomizations";
 import {
   calcTotalExpenses, calcTotalBonuses, calcTotalCompanyExpenses,
   calcGrossProfit, calcCommissionProfit,
@@ -38,7 +38,8 @@ interface Props {
   milestones: Record<string, string | null>;
   checks: PaymentCheck[];
   qualification: Qualification;
-  numberOfSquares: number;
+  /** Resolved planning roof SQ (Measurements → scope → legacy → installed fallback). */
+  planningRoofSquares: number;
   productionItems: ProductionItem[];
   assignments: any[];
   profileMap: Map<string, any>;
@@ -48,14 +49,16 @@ interface Props {
 }
 
 export function OverviewTab({
-  milestones, checks, qualification, numberOfSquares,
+  milestones, checks, qualification, planningRoofSquares,
   productionItems, assignments, profileMap, tracking, itemizedExpenses = [], draws = [],
 }: Props) {
   const { data: productionStatuses = [] } = useProductionItemStatuses(true);
+  const { data: milestoneDefs = [] } = useProductionMilestones(true);
 
   // Milestone progress
-  const filledMilestones = MILESTONE_KEYS.filter(({ key }) => milestones?.[key]);
-  const milestoneProgress = (filledMilestones.length / MILESTONE_KEYS.length) * 100;
+  const filledMilestones = milestoneDefs.filter((m) => milestones?.[m.name]);
+  const milestoneProgress =
+    milestoneDefs.length > 0 ? (filledMilestones.length / milestoneDefs.length) * 100 : 0;
 
   // Days
   const leadDate = milestones?.date_lead ? new Date(milestones.date_lead) : null;
@@ -321,7 +324,11 @@ export function OverviewTab({
               }>
                 {qualification?.status || "Not Set"}
               </Badge>
-              {numberOfSquares > 0 && <span className="text-xs text-muted-foreground">{numberOfSquares} squares</span>}
+              {planningRoofSquares > 0 ? (
+                <span className="text-xs text-muted-foreground">{planningRoofSquares.toLocaleString()} planning SQ</span>
+              ) : (
+                <span className="text-xs text-muted-foreground">No planning SQ</span>
+              )}
             </div>
             {qualification?.estimate_cost ? (
               <div className="text-sm space-y-1">

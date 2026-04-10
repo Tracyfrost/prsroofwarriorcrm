@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { PasswordInput } from "@/components/PasswordInput";
+import { PasswordInput } from "@/components/ui/password-input";   // ← Fixed import
 import { Loader2, ShieldAlert } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { KnotShieldLogo } from "@/components/KnotShieldLogo";
@@ -17,6 +17,7 @@ export default function Auth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
   const { signIn } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -27,11 +28,17 @@ export default function Auth() {
     setLoading(true);
 
     const { error } = await signIn(email, password);
+
     if (error) {
-      toast({ title: "Access Denied", description: error.message, variant: "destructive" });
+      toast({
+        title: "Access Denied",
+        description: error.message,
+        variant: "destructive",
+      });
     } else {
       navigate("/");
     }
+
     setLoading(false);
   };
 
@@ -57,7 +64,11 @@ export default function Auth() {
           className="mb-8 flex flex-col items-center gap-3"
         >
           {logoUrl ? (
-            <img src={logoUrl} alt={`${companyName} logo`} className="h-16 w-16 rounded-2xl object-contain shadow-card" />
+            <img
+              src={logoUrl}
+              alt={`${companyName} logo`}
+              className="h-16 w-16 rounded-2xl object-contain shadow-card"
+            />
           ) : (
             <div className="rounded-2xl shadow-card p-1">
               <KnotShieldLogo size={56} />
@@ -82,6 +93,7 @@ export default function Auth() {
               Authenticate to enter the war room
             </CardDescription>
           </CardHeader>
+
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -95,6 +107,7 @@ export default function Auth() {
                   required
                 />
               </div>
+
               <div className="space-y-2">
                 <Label htmlFor="password">Secure Password</Label>
                 <PasswordInput
@@ -103,9 +116,10 @@ export default function Auth() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  minLength={6}
+                  minLength={8}   // upgraded from 6 to match Edge Function
                 />
               </div>
+
               <BattleTooltip phraseKey="login">
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -113,6 +127,7 @@ export default function Auth() {
                 </Button>
               </BattleTooltip>
             </form>
+
             <div className="mt-4 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
               <ShieldAlert className="h-3.5 w-3.5" />
               <span>Access by invitation only — contact your admin</span>

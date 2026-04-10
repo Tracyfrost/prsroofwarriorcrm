@@ -44,6 +44,7 @@ import {
   defaultDrawInclusions,
 } from "@/lib/qualificationCalculations";
 import { resolvePlanningRoofSquares, type PlanningJobSquares } from "@/lib/roofSquares";
+import { buildJobOrderingWorksheetCsv } from "@/lib/orderFormCsv";
 import { format } from "date-fns";
 
 const STATUS_CONFIG: Record<string, { color: string; icon: typeof ShieldCheck; label: string }> = {
@@ -64,13 +65,6 @@ const JOB_GATE_BADGE: Record<string, string> = {
   Hold: "bg-destructive/20 text-destructive-foreground border-destructive/30",
   Supplement: "bg-warning/20 text-warning-foreground border-warning/30",
 };
-
-function csvEscape(s: string) {
-  if (s.includes(",") || s.includes('"') || s.includes("\n")) {
-    return `"${s.replace(/"/g, '""')}"`;
-  }
-  return s;
-}
 
 function normalizeDraft(q: Qualification): Qualification {
   return {
@@ -155,35 +149,17 @@ export function QualificationTab({
   };
 
   const exportOrderCsv = () => {
-    const idLabel = jobDisplayId || jobId.slice(0, 8);
-    const planningLabel = planningSq > 0 ? String(planningSq) : "";
-    const headerRows = [
-      ["Job", idLabel],
-      ["Exported", format(new Date(), "yyyy-MM-dd HH:mm")],
-      ["Planning roof SQ", planningLabel],
-      [],
-      ["Q1", "Material", "Q2", "Q3", "SQ", "Valley50ft", "Valley25ft", "Flag"],
-    ];
-    const dataRows = orderingLines.map((r) => [
-      r.q1,
-      r.label,
-      r.q2,
-      r.q3,
-      planningLabel,
-      r.valley50ft,
-      r.valley25ft,
-      r.flag ? "TRUE" : "FALSE",
-    ]);
-    const lines = [
-      ...headerRows.map((r) => r.map((c) => csvEscape(String(c))).join(",")),
-      ...dataRows.map((r) => r.map((c) => csvEscape(String(c))).join(",")),
-    ];
-    const csv = lines.join("\n");
+    const { csv, filename } = buildJobOrderingWorksheetCsv({
+      jobDisplayId,
+      jobId,
+      planningSq,
+      orderingLines,
+    });
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${idLabel}-order-form.csv`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
     toast({ title: "Order form CSV downloaded" });
@@ -377,18 +353,15 @@ export function QualificationTab({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Est. roof SQ (legacy)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={draft.estimate_roof_sq ?? ""}
-                  onChange={(e) =>
-                    setDraft((d) => ({
-                      ...d,
-                      estimate_roof_sq: num(e.target.value) ?? 0,
-                    }))
-                  }
-                />
+                <Label className="text-xs">Planning roof SQ (read-only)</Label>
+                <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 py-2 text-sm tabular-nums">
+                  {planningSq > 0 ? planningSq.toLocaleString() : "—"}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Master squares are set on the <span className="font-medium text-foreground">Measurements</span> tab (
+                  <span className="font-mono">jobs.squares_estimated</span>). Use &quot;Copy planning SQ to legacy&quot;
+                  below if an export needs <span className="font-mono">qualification.estimate_roof_sq</span>.
+                </p>
               </div>
             </div>
             <div className="space-y-1.5">
@@ -558,7 +531,7 @@ export function QualificationTab({
           <div>
             <CardTitle className="text-sm">Job ordering</CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
-              SQ is planning roof squares (Measurements estimated → scope text → legacy Est. roof SQ → installed). Edit estimated squares on the Measurements tab.
+              The SQ column is planning roof squares. Set the master value on the <span className="font-medium text-foreground">Measurements</span> tab; the resolver may fall back to scope text or legacy fields only when master is unset.
             </p>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
@@ -571,17 +544,20 @@ export function QualificationTab({
                 if (planningSq <= 0) {
                   toast({
                     title: "Set planning SQ first",
-                    description: "Enter estimated squares on the Measurements tab, or scope / Est. roof SQ in qualification.",
+                    description: "Enter master planning squares on the Measurements tab (calculator or GAF PDF).",
                     variant: "destructive",
                   });
                   return;
                 }
                 setDraft((d) => ({ ...d, estimate_roof_sq: planningSq }));
-                toast({ title: "Est. roof SQ (legacy) updated to match planning SQ" });
+                toast({
+                  title: "Legacy field updated in draft",
+                  description: "qualification.estimate_roof_sq matches planning SQ — save qualification to persist.",
+                });
               }}
             >
               <Copy className="mr-2 h-4 w-4" />
-              Sync SQ to legacy
+              Copy planning SQ to legacy
             </Button>
             <Button type="button" variant="outline" size="sm" className="min-h-[44px] w-full sm:w-auto" onClick={exportOrderCsv}>
               <Download className="mr-2 h-4 w-4" />

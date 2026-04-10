@@ -126,4 +126,24 @@
   .font-display {
     font-family: 'Oswald', system-ui, sans-serif;
   }
+
+  /** Production board horizontal track — clearer scrollbar on Windows/Linux; macOS may still overlay. */
+  .production-board-hscroll {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.5) hsl(var(--muted) / 0.4);
+  }
+  .production-board-hscroll::-webkit-scrollbar {
+    height: 10px;
+  }
+  .production-board-hscroll::-webkit-scrollbar-track {
+    background: hsl(var(--muted) / 0.35);
+    border-radius: 9999px;
+  }
+  .production-board-hscroll::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.45);
+    border-radius: 9999px;
+  }
+  .production-board-hscroll::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.65);
+  }
 }

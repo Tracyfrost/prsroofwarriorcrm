@@ -41,7 +41,7 @@ export function ResponsiveModal({
 
   if (isMobile) {
     return (
-      <Drawer open={open} onOpenChange={onOpenChange}>
+      <Drawer open={open} onOpenChange={onOpenChange} shouldScaleBackground={false}>
         <DrawerContent className="max-h-[85vh]">
           {(title || description) && (
             <DrawerHeader className="text-left">
@@ -57,7 +57,10 @@ export function ResponsiveModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={className ?? "max-w-lg max-h-[90vh] overflow-y-auto"}>
+      <DialogContent
+        className={className ?? "max-w-lg max-h-[90vh] overflow-y-auto"}
+        {...(!description ? { "aria-describedby": undefined } : {})}
+      >
         {(title || description) && (
           <DialogHeader>
             {title && <DialogTitle>{title}</DialogTitle>}

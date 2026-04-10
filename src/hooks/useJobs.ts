@@ -253,6 +253,7 @@ export function useCreateAppointment() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["appointments"] });
       qc.invalidateQueries({ queryKey: ["all-appointments"] });
+      qc.invalidateQueries({ queryKey: ["customer-appointments"] });
     },
   });
 }
@@ -273,6 +274,7 @@ export function useUpdateAppointment() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["appointments"] });
       qc.invalidateQueries({ queryKey: ["all-appointments"] });
+      qc.invalidateQueries({ queryKey: ["customer-appointments"] });
     },
   });
 }
@@ -290,6 +292,7 @@ export function useDeleteAppointment() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["appointments"] });
       qc.invalidateQueries({ queryKey: ["all-appointments"] });
+      qc.invalidateQueries({ queryKey: ["customer-appointments"] });
     },
   });
 }

@@ -854,6 +854,7 @@ export type Database = {
           labor_cost: number
           labor_vendor: string | null
           material_cost: number
+          material_logistics: Json
           material_order_status: string
           material_vendor: string | null
           pre_draw_amount: number | null
@@ -886,6 +887,7 @@ export type Database = {
           labor_cost?: number
           labor_vendor?: string | null
           material_cost?: number
+          material_logistics?: Json
           material_order_status?: string
           material_vendor?: string | null
           pre_draw_amount?: number | null
@@ -918,6 +920,7 @@ export type Database = {
           labor_cost?: number
           labor_vendor?: string | null
           material_cost?: number
+          material_logistics?: Json
           material_order_status?: string
           material_vendor?: string | null
           pre_draw_amount?: number | null
@@ -952,13 +955,48 @@ export type Database = {
           },
         ]
       }
-      job_statuses: {
+      custom_flows: {
+        Row: {
+          active: boolean
+          created_at: string
+          description: string | null
+          enforce_sequence: boolean
+          flow_type: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          enforce_sequence?: boolean
+          flow_type: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          description?: string | null
+          enforce_sequence?: boolean
+          flow_type?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      flow_stages: {
         Row: {
           active: boolean
           color: string
           created_at: string
           display_name: string
+          flow_id: string
           id: string
+          is_milestone: boolean
           name: string
           sequence: number
           updated_at: string
@@ -968,7 +1006,9 @@ export type Database = {
           color?: string
           created_at?: string
           display_name: string
+          flow_id: string
           id?: string
+          is_milestone?: boolean
           name: string
           sequence: number
           updated_at?: string
@@ -978,12 +1018,22 @@ export type Database = {
           color?: string
           created_at?: string
           display_name?: string
+          flow_id?: string
           id?: string
+          is_milestone?: boolean
           name?: string
           sequence?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "flow_stages_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "custom_flows"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       jobs: {
         Row: {
@@ -1007,7 +1057,7 @@ export type Database = {
           qualification: Json | null
           sales_rep_id: string | null
           site_address: Json | null
-          status: Database["public"]["Enums"]["job_status"]
+          status: string
           sub_number: number | null
           supplement_status: string | null
           tracking: Json | null
@@ -1035,7 +1085,7 @@ export type Database = {
           qualification?: Json | null
           sales_rep_id?: string | null
           site_address?: Json | null
-          status?: Database["public"]["Enums"]["job_status"]
+          status?: string
           sub_number?: number | null
           supplement_status?: string | null
           tracking?: Json | null
@@ -1063,7 +1113,7 @@ export type Database = {
           qualification?: Json | null
           sales_rep_id?: string | null
           site_address?: Json | null
-          status?: Database["public"]["Enums"]["job_status"]
+          status?: string
           sub_number?: number | null
           supplement_status?: string | null
           tracking?: Json | null
@@ -1493,69 +1543,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      production_item_statuses: {
-        Row: {
-          active: boolean
-          color: string
-          created_at: string
-          display_name: string
-          id: string
-          name: string
-          sequence: number
-          updated_at: string
-        }
-        Insert: {
-          active?: boolean
-          color?: string
-          created_at?: string
-          display_name: string
-          id?: string
-          name: string
-          sequence: number
-          updated_at?: string
-        }
-        Update: {
-          active?: boolean
-          color?: string
-          created_at?: string
-          display_name?: string
-          id?: string
-          name?: string
-          sequence?: number
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      production_milestones: {
-        Row: {
-          active: boolean
-          created_at: string
-          display_name: string
-          id: string
-          name: string
-          sequence: number
-          updated_at: string
-        }
-        Insert: {
-          active?: boolean
-          created_at?: string
-          display_name: string
-          id?: string
-          name: string
-          sequence: number
-          updated_at?: string
-        }
-        Update: {
-          active?: boolean
-          created_at?: string
-          display_name?: string
-          id?: string
-          name?: string
-          sequence?: number
-          updated_at?: string
-        }
-        Relationships: []
       }
       production_status_history: {
         Row: {
@@ -2181,6 +2168,15 @@ export type Database = {
         Args: { _reassign_to_user_id?: string; _target_user_id: string }
         Returns: undefined
       }
+      search_customers_global: {
+        Args: { search_query: string; result_limit?: number }
+        Returns: {
+          id: string
+          name: string
+          customer_number: string
+          match_hint: string | null
+        }[]
+      }
     }
     Enums: {
       app_role:
@@ -2204,14 +2200,7 @@ export type Database = {
         | "Other"
       commission_status: "earned" | "paid"
       customer_type: "residential" | "commercial"
-      doc_type: "contract" | "invoice" | "photo" | "other"
-      job_status:
-        | "lead"
-        | "inspected"
-        | "approved"
-        | "scheduled"
-        | "completed"
-        | "closed"
+      doc_type: "contract" | "invoice" | "photo" | "other" | "measurements"
       lead_assignment_status: "assigned" | "converted" | "dead" | "reallocated"
       lead_source:
         | "self_gen"
@@ -2385,15 +2374,7 @@ export const Constants = {
       ],
       commission_status: ["earned", "paid"],
       customer_type: ["residential", "commercial"],
-      doc_type: ["contract", "invoice", "photo", "other"],
-      job_status: [
-        "lead",
-        "inspected",
-        "approved",
-        "scheduled",
-        "completed",
-        "closed",
-      ],
+      doc_type: ["contract", "invoice", "photo", "other", "measurements"],
       lead_assignment_status: ["assigned", "converted", "dead", "reallocated"],
       lead_source: [
         "self_gen",

@@ -2,11 +2,10 @@ import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
-import { useJob, useUpdateJob, useAppointments, useCreateAppointment, useJobAssignments, useCreateJobAssignment, useDeleteJobAssignment, useSubJobs, useSoftDeleteJob } from "@/hooks/useJobs";
+import { useJob, useUpdateJob, useAppointments, useJobAssignments, useCreateJobAssignment, useDeleteJobAssignment, useSubJobs, useSoftDeleteJob } from "@/hooks/useJobs";
 import { CreateJobModal } from "@/components/jobs/CreateJobModal";
 import { useCreateCommission } from "@/hooks/useCommissions";
 import { useAllProfiles } from "@/hooks/useHierarchy";
-import { DocumentsPanel } from "@/components/DocumentsPanel";
 import { SiteCamGallery } from "@/components/sitecam/SiteCamGallery";
 import { TradesBadges } from "@/components/job/TradesBadges";
 import { useTradeTypes } from "@/hooks/useProduction";
@@ -20,7 +19,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Calendar, DollarSign, FileText, MapPin, Phone, Mail, Save, Plus, Brain, Loader2, Hammer, Users, X, Trash2, ChevronDown, ChevronUp, Camera } from "lucide-react";
+import { ArrowLeft, DollarSign, MapPin, Phone, Mail, Save, Plus, Brain, Loader2, Hammer, Users, X, Trash2, ChevronDown, ChevronUp, Camera } from "lucide-react";
 import { AddressLink } from "@/components/AddressLink";
 import { BattleTooltip } from "@/components/BattleTooltip";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -29,6 +28,7 @@ import { ResponsiveModal } from "@/components/ui/responsive-modal";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useUserRoles } from "@/hooks/useProfile";
+import { JobAppointmentsBlock } from "@/components/appointments/JobAppointmentsBlock";
 import { ProductionSection } from "@/components/production/ProductionSection";
 import { DualWorkflowStatusBar } from "@/components/job/DualWorkflowStatusBar";
 import { useStatusBranches } from "@/hooks/useStatusBranches";
@@ -38,9 +38,8 @@ import { useAuth } from "@/lib/auth";
 import { useJobStatuses } from "@/hooks/useCustomizations";
 import { format } from "date-fns";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { getSquaresReported } from "@/lib/reports/repResolution";
 
-// Status labels/list now driven by job_statuses table
+// Status labels/list from flow_stages (job_status flow)
 
 const ASSIGNMENT_ROLES = [
   { value: "primary_rep", label: "Primary Rep" },
@@ -61,7 +60,6 @@ export default function JobDetail() {
   const { data: tradeTypes = [] } = useTradeTypes();
   const statusLabels: Record<string, string> = Object.fromEntries(jobStatuses.map(s => [s.name, s.display_name]));
   const updateJob = useUpdateJob();
-  const createAppointment = useCreateAppointment();
   const createAssignment = useCreateJobAssignment();
   const deleteAssignment = useDeleteJobAssignment();
   const createCommission = useCreateCommission();
@@ -77,8 +75,6 @@ export default function JobDetail() {
   const [editAcv, setEditAcv] = useState<string>("");
   const [editRcv, setEditRcv] = useState<string>("");
   const [showFinEdit, setShowFinEdit] = useState(false);
-  const [apptDate, setApptDate] = useState("");
-  const [apptOutcome, setApptOutcome] = useState("");
   const [commAmount, setCommAmount] = useState("");
   const [commNotes, setCommNotes] = useState("");
   const [showCommForm, setShowCommForm] = useState(false);
@@ -247,22 +243,6 @@ export default function JobDetail() {
       setSiteCity(addr.city || "");
       setSiteState(addr.state || "");
       setSiteZip(addr.zip || "");
-    }
-  };
-
-  const handleAddAppointment = async () => {
-    if (!apptDate) return;
-    try {
-      await createAppointment.mutateAsync({
-        job_id: job.id,
-        date_time: new Date(apptDate).toISOString(),
-        outcome: apptOutcome,
-      });
-      setApptDate("");
-      setApptOutcome("");
-      toast({ title: "Appointment added" });
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
     }
   };
 
@@ -568,14 +548,9 @@ export default function JobDetail() {
               onEdit={() => setEditNotes(job.notes ?? "")}
               onChange={setEditNotes} onSave={handleSaveNotes} onCancel={() => setEditNotes(null)}
             />
-            <AppointmentsCard
-              appointments={appointments} apptDate={apptDate} apptOutcome={apptOutcome}
-              onDateChange={setApptDate} onOutcomeChange={setApptOutcome}
-              onAdd={handleAddAppointment} isPending={createAppointment.isPending}
-            />
+            <JobAppointmentsBlock jobId={job.id} appointments={appointments} />
           </div>
           <div className="space-y-4">
-            <DocumentsPanel jobId={job.id} />
             <CommissionCard
               jobId={job.id} salesRepId={commRepId}
               showForm={showCommForm} amount={commAmount} notes={commNotes}
@@ -691,7 +666,6 @@ export default function JobDetail() {
               jobDisplayId={(job as any).job_id}
               milestones={(job as any).production_milestones ?? {}}
               qualification={((job as any).qualification ?? {}) as Qualification}
-              numberOfSquares={getSquaresReported(job as any)}
               numberOfSquaresRaw={(job as any).number_of_squares ?? null}
               squaresEstimated={(job as any).squares_estimated ?? null}
               squaresActualInstalled={(job as any).squares_actual_installed ?? null}
@@ -735,12 +709,6 @@ export default function JobDetail() {
                 Team
               </TabsTrigger>
               <TabsTrigger
-                value="docs"
-                className="flex-1 min-h-[48px] text-[11px] sm:text-xs font-semibold tracking-[0.14em] uppercase rounded-md text-[var(--wc-muted)] data-[state=active]:bg-[var(--wc-ink)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-[var(--wc-border)] hover:bg-[var(--wc-surface-2)] hover:text-[var(--wc-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
-              >
-                Docs
-              </TabsTrigger>
-              <TabsTrigger
                 value="production"
                 className="flex-1 min-h-[48px] text-[11px] sm:text-xs font-semibold tracking-[0.14em] uppercase rounded-md text-[var(--wc-muted)] data-[state=active]:bg-[var(--wc-ink)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-[var(--wc-border)] hover:bg-[var(--wc-surface-2)] hover:text-[var(--wc-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
               >
@@ -774,11 +742,7 @@ export default function JobDetail() {
                 onEdit={() => setEditNotes(job.notes ?? "")}
                 onChange={setEditNotes} onSave={handleSaveNotes} onCancel={() => setEditNotes(null)}
               />
-              <AppointmentsCard
-                appointments={appointments} apptDate={apptDate} apptOutcome={apptOutcome}
-                onDateChange={setApptDate} onOutcomeChange={setApptOutcome}
-                onAdd={handleAddAppointment} isPending={createAppointment.isPending}
-              />
+              <JobAppointmentsBlock jobId={job.id} appointments={appointments} />
             </TabsContent>
             <TabsContent value="team" className="space-y-4 mt-4">
               <AssignmentsCard
@@ -796,16 +760,12 @@ export default function JobDetail() {
                 onAdd={handleAddCommission} isPending={createCommission.isPending}
               />
             </TabsContent>
-            <TabsContent value="docs" className="mt-4 space-y-4">
-              <DocumentsPanel jobId={job.id} />
-            </TabsContent>
             <TabsContent value="production" className="mt-4">
                <ProductionSection
                 jobId={job.id}
                 jobDisplayId={(job as any).job_id}
                 milestones={(job as any).production_milestones ?? {}}
                 qualification={((job as any).qualification ?? {}) as Qualification}
-                numberOfSquares={getSquaresReported(job as any)}
                 numberOfSquaresRaw={(job as any).number_of_squares ?? null}
                 squaresEstimated={(job as any).squares_estimated ?? null}
                 squaresActualInstalled={(job as any).squares_actual_installed ?? null}
@@ -1009,30 +969,6 @@ function NotesCard({ notes, editNotes, onEdit, onChange, onSave, onCancel }: {
         ) : (
           <p className="text-sm text-muted-foreground whitespace-pre-wrap">{notes || "No notes yet."}</p>
         )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function AppointmentsCard({ appointments, apptDate, apptOutcome, onDateChange, onOutcomeChange, onAdd, isPending }: {
-  appointments: any[]; apptDate: string; apptOutcome: string;
-  onDateChange: (v: string) => void; onOutcomeChange: (v: string) => void; onAdd: () => void; isPending: boolean;
-}) {
-  return (
-    <Card className="shadow-card">
-      <CardHeader><CardTitle className="text-sm flex items-center gap-2"><Calendar className="h-4 w-4" /> Appointments</CardTitle></CardHeader>
-      <CardContent className="space-y-3">
-        {appointments.map((a: any) => (
-          <div key={a.id} className="rounded-lg border p-2.5 text-sm">
-            <p className="font-medium text-foreground">{format(new Date(a.date_time), "MMM d, yyyy h:mm a")}</p>
-            {a.outcome && <p className="text-xs text-muted-foreground mt-1">{a.outcome}</p>}
-          </div>
-        ))}
-        <div className="border-t pt-3 space-y-2">
-          <Input type="datetime-local" value={apptDate} onChange={(e) => onDateChange(e.target.value)} />
-          <Input placeholder="Outcome/notes" value={apptOutcome} onChange={(e) => onOutcomeChange(e.target.value)} maxLength={500} />
-          <Button size="sm" onClick={onAdd} disabled={isPending || !apptDate} className="w-full">Add Appointment</Button>
-        </div>
       </CardContent>
     </Card>
   );

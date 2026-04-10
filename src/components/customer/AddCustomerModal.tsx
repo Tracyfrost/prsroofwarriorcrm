@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { ResponsiveModal } from "@/components/ui/responsive-modal";
 import { Plus, X, AlertCircle, Users, Package } from "lucide-react";
 import { BattleTooltip } from "@/components/BattleTooltip";
@@ -11,9 +12,16 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLeadSources } from "@/hooks/useCustomizations";
 import { normalizeLeadSourceKey } from "@/lib/intake/normalizeLeadSourceKey";
+import { useAllProfiles, type ProfileWithHierarchy } from "@/hooks/useHierarchy";
+import type { Database, Json } from "@/integrations/supabase/types";
+
+type CustomerInsert = Database["public"]["Tables"]["customers"]["Insert"];
+type LeadAssignmentInsert = Database["public"]["Tables"]["lead_assignments"]["Insert"];
+
+const ASSIGNED_UNASSIGNED = "unassigned";
 
 interface ContactEntry { type: string; value: string }
 
@@ -42,8 +50,32 @@ const emptyForm: CustomerForm = {
   emails: [{ type: "primary", value: "" }],
   street: "", city: "", state: "", zip: "",
   insurance_carrier: "", notes: "", lead_source: "",
-  assigned_rep_id: "",
+  assigned_rep_id: ASSIGNED_UNASSIGNED,
 };
+
+function resolveAssignedRepId(raw: string): string | null {
+  if (!raw || raw === ASSIGNED_UNASSIGNED) return null;
+  return raw;
+}
+
+function partitionAssignees(profiles: Array<ProfileWithHierarchy & { deleted_at?: string | null }>) {
+  const active = profiles.filter((p) => p.active && !p.deleted_at);
+  const sales: ProfileWithHierarchy[] = [];
+  const managers: ProfileWithHierarchy[] = [];
+  const other: ProfileWithHierarchy[] = [];
+  for (const p of active) {
+    const roles = p.roles ?? [];
+    if (roles.includes("sales_rep")) sales.push(p);
+    else if (roles.includes("manager") || roles.includes("owner")) managers.push(p);
+    else other.push(p);
+  }
+  const byName = (a: ProfileWithHierarchy, b: ProfileWithHierarchy) =>
+    (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" });
+  sales.sort(byName);
+  managers.sort(byName);
+  other.sort(byName);
+  return { sales, managers, other };
+}
 
 interface AddCustomerModalProps {
   open: boolean;
@@ -57,15 +89,25 @@ export function AddCustomerModal({ open, onOpenChange }: AddCustomerModalProps) 
   const { user } = useAuth();
   const qc = useQueryClient();
   const { data: leadSources = [] } = useLeadSources(true);
+  const { data: allProfiles = [] } = useAllProfiles();
+
+  const validLeadSources = useMemo(
+    () => leadSources.filter((s) => s.name && String(s.name).trim() !== ""),
+    [leadSources],
+  );
+
+  /** Radix Select must not use "" or unknown values — no matching SelectItem crashes the tree. */
+  const leadSourceSelectValue = validLeadSources.some((s) => s.name === form.lead_source)
+    ? form.lead_source
+    : undefined;
+
+  const { sales, managers, other } = useMemo(() => partitionAssignees(allProfiles), [allProfiles]);
 
   const normalizedLeadSource = normalizeLeadSourceKey(form.lead_source) ?? form.lead_source;
 
-  // Check if the selected source requires pool
   const selectedSource = leadSources.find(s => s.name === normalizedLeadSource);
   const isPooledSource = selectedSource?.requires_pool ?? false;
-  const hasLeadSource = !!normalizedLeadSource;
 
-  // Fetch available package for pooled source
   const { data: availablePackage } = useQuery({
     queryKey: ["available_package", selectedSource?.id],
     enabled: isPooledSource && !!selectedSource?.id,
@@ -83,21 +125,9 @@ export function AddCustomerModal({ open, onOpenChange }: AddCustomerModalProps) 
     },
   });
 
-  // Fetch active reps for assignment
-  const { data: reps = [] } = useQuery({
-    queryKey: ["active_reps"],
-    enabled: hasLeadSource,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("user_id, name")
-        .is("deleted_at", null)
-        .eq("active", true)
-        .order("name");
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+  const pooledSubmitBlocked =
+    isPooledSource &&
+    (!availablePackage || !resolveAssignedRepId(form.assigned_rep_id));
 
   const addCustomer = useMutation({
     mutationFn: async (f: CustomerForm) => {
@@ -110,11 +140,12 @@ export function AddCustomerModal({ open, onOpenChange }: AddCustomerModalProps) 
         if (!sourceExists) throw new Error("Selected lead source is invalid");
       }
 
-      // If pooled source, validate
+      const repId = resolveAssignedRepId(f.assigned_rep_id);
+
       const src = leadSources.find(s => s.name === normalizedInputLeadSource);
       if (src?.requires_pool) {
         if (!availablePackage) throw new Error("Arsenal Depleted – Forge New Package, Commander!");
-        if (!f.assigned_rep_id) throw new Error("A rep must be assigned for pooled leads.");
+        if (!repId) throw new Error("A rep must be assigned for pooled leads.");
       }
 
       const contactInfo = {
@@ -122,39 +153,46 @@ export function AddCustomerModal({ open, onOpenChange }: AddCustomerModalProps) 
         emails: f.emails.filter(e => e.value.trim()).map(e => ({ type: e.type, address: e.value.trim() })),
       };
 
-      const nameJson: any = {
+      const nameJson: Json = {
         primary: { first: f.firstName.trim(), last: f.lastName.trim() },
         spouse: f.hasSpouse ? { first: f.spouseFirst.trim(), last: f.spouseLast.trim() } : null,
       };
 
       const fullName = `${f.firstName.trim()} ${f.lastName.trim()}`.trim();
 
-      const { data: customer, error } = await supabase.from("customers").insert({
+      const customerPayload: CustomerInsert = {
         name: fullName,
         name_json: nameJson,
-        contact_info: contactInfo,
-        main_address: { street: f.street.trim(), city: f.city.trim(), state: f.state.trim(), zip: f.zip.trim() },
+        contact_info: contactInfo as Json,
+        main_address: {
+          street: f.street.trim(),
+          city: f.city.trim(),
+          state: f.state.trim(),
+          zip: f.zip.trim(),
+        } as Json,
         insurance_carrier: f.insurance_carrier.trim() || "",
         notes: f.notes.trim() || "",
-        created_by: user?.id,
+        created_by: user?.id ?? null,
         customer_number: "auto",
         lead_source: normalizedInputLeadSource || null,
-        assigned_rep_id: f.assigned_rep_id || null,
-      } as any).select("id").single();
+        assigned_rep_id: repId,
+      };
+
+      const { data: customer, error } = await supabase.from("customers").insert(customerPayload).select("id").single();
 
       if (error) {
         console.error("Insert Error:", error);
         throw error;
       }
 
-      // If pooled source → create lead_assignment
-      if (src?.requires_pool && availablePackage && customer) {
-        const { error: assignErr } = await supabase.from("lead_assignments").insert({
+      if (src?.requires_pool && availablePackage && customer && repId) {
+        const assignmentPayload: LeadAssignmentInsert = {
           customer_id: customer.id,
           lead_source_id: src.id,
           package_id: availablePackage.id,
-          assigned_rep_id: f.assigned_rep_id,
-        } as any);
+          assigned_rep_id: repId,
+        };
+        const { error: assignErr } = await supabase.from("lead_assignments").insert(assignmentPayload);
         if (assignErr) console.error("Lead assignment error:", assignErr);
       }
     },
@@ -276,21 +314,81 @@ export function AddCustomerModal({ open, onOpenChange }: AddCustomerModalProps) 
           {/* Lead Source */}
           <div className="space-y-2">
             <Label>Forge Lead Origin</Label>
-            <Select value={form.lead_source} onValueChange={(val) => setForm(prev => ({ ...prev, lead_source: val, assigned_rep_id: "" }))}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select origin..." />
+            {validLeadSources.length === 0 ? (
+              <p className="text-sm text-muted-foreground rounded-md border border-dashed px-3 py-2">
+                No lead origins configured. Add lead sources in Settings to tag new contacts.
+              </p>
+            ) : (
+              <Select
+                value={leadSourceSelectValue}
+                onValueChange={(val) => setForm((prev) => ({ ...prev, lead_source: val }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select origin..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {validLeadSources.map((source) => (
+                    <SelectItem key={source.id} value={source.name}>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: source.color }} />
+                        {source.display_name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          {/* Assign To */}
+          <div className="space-y-2">
+            <Label>Assign To</Label>
+            <Select
+              value={form.assigned_rep_id}
+              onValueChange={(val) => setForm(prev => ({ ...prev, assigned_rep_id: val }))}
+            >
+              <SelectTrigger className="min-h-[44px]">
+                <SelectValue placeholder="Select assignee..." />
               </SelectTrigger>
               <SelectContent>
-                {leadSources.filter(s => s.name && s.name.trim() !== "").map((source) => (
-                  <SelectItem key={source.id} value={source.name}>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: source.color }} />
-                      {source.display_name}
-                    </div>
-                  </SelectItem>
-                ))}
+                <SelectItem value={ASSIGNED_UNASSIGNED}>Unassigned pool</SelectItem>
+                {sales.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>Sales reps</SelectLabel>
+                    {sales.map((p) => (
+                      <SelectItem key={p.user_id} value={p.user_id}>
+                        {p.name || p.user_id}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+                {managers.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>Managers</SelectLabel>
+                    {managers.map((p) => (
+                      <SelectItem key={p.user_id} value={p.user_id}>
+                        {p.name || p.user_id}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+                {other.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>Other</SelectLabel>
+                    {other.map((p) => (
+                      <SelectItem key={p.user_id} value={p.user_id}>
+                        {p.name || p.user_id}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
               </SelectContent>
             </Select>
+            {isPooledSource ? (
+              <p className="text-xs text-muted-foreground">
+                Pooled sources require assigning to a person{!availablePackage ? " (and an available lead package)." : "."}
+              </p>
+            ) : null}
           </div>
 
           {/* Pooled Source: Package Preview */}
@@ -312,35 +410,16 @@ export function AddCustomerModal({ open, onOpenChange }: AddCustomerModalProps) 
             </div>
           )}
 
-          {/* Rep assignment for all lead sources */}
-          {hasLeadSource && (
-            <div className="space-y-3 rounded-lg border border-accent/30 bg-accent/5 p-3">
-              <div className="flex items-center gap-2 text-sm font-medium text-accent-foreground">
-                <Users className="h-4 w-4" /> Rep Assignment
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">
-                  Assign to Rep {isPooledSource ? <span className="text-destructive">*</span> : null}
-                </Label>
-                <Select value={form.assigned_rep_id} onValueChange={(val) => setForm(prev => ({ ...prev, assigned_rep_id: val }))}>
-                  <SelectTrigger className="min-h-[44px]">
-                    <SelectValue placeholder="Select rep..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {reps.map((r) => (
-                      <SelectItem key={r.user_id} value={r.user_id}>{r.name || r.user_id}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          )}
-
           {/* Address */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
               <Label>Street</Label>
-              <Input value={form.street} onChange={(e) => setForm(prev => ({ ...prev, street: e.target.value }))} />
+              <Input
+                value={form.street}
+                onChange={(e) => setForm((prev) => ({ ...prev, street: e.target.value }))}
+                placeholder="Street address"
+                autoComplete="street-address"
+              />
             </div>
             <div className="space-y-2">
               <Label>City</Label>
@@ -361,8 +440,20 @@ export function AddCustomerModal({ open, onOpenChange }: AddCustomerModalProps) 
               <Input value={form.insurance_carrier} onChange={(e) => setForm(prev => ({ ...prev, insurance_carrier: e.target.value }))} />
             </div>
           </div>
+
+          <div className="space-y-2">
+            <Label>Notes</Label>
+            <Textarea
+              value={form.notes}
+              onChange={(e) => setForm(prev => ({ ...prev, notes: e.target.value }))}
+              placeholder="Add context for this lead..."
+              rows={4}
+              className="min-h-[100px] resize-y"
+            />
+          </div>
+
           <BattleTooltip phraseKey="submit">
-            <Button type="submit" className="w-full min-h-[48px] sm:min-h-0" disabled={addCustomer.isPending || (isPooledSource && !availablePackage)}>
+            <Button type="submit" className="w-full min-h-[48px] sm:min-h-0" disabled={addCustomer.isPending || pooledSubmitBlocked}>
               {addCustomer.isPending ? "Recruiting..." : "⚔ Recruit Ally"}
             </Button>
           </BattleTooltip>

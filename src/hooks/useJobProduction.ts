@@ -59,16 +59,6 @@ export type Qualification = {
   installer_pay_total?: number;
 };
 
-export const MILESTONE_KEYS = [
-  { key: "date_lead", label: "Lead Date" },
-  { key: "date_inspection", label: "Inspection" },
-  { key: "date_contract_signed", label: "Contract Signed" },
-  { key: "date_adjuster_meeting", label: "Adjuster Meeting" },
-  { key: "date_to_install", label: "Scheduled Install" },
-  { key: "date_of_install", label: "Actual Install" },
-  { key: "date_of_completion", label: "Completion" },
-] as const;
-
 export const CHECK_TYPES = ["ACV", "2nd_ACV", "Depreciation", "Final", "Other"] as const;
 
 export function useMilestoneHistory(jobId?: string) {

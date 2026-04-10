@@ -26,3 +26,8 @@ dist-ssr
 
 # Supabase CLI local cache
 supabase/.temp/
+
+# Local secrets (Supabase keys, Google Maps, etc.)
+.env
+.env.*
+!.env.example

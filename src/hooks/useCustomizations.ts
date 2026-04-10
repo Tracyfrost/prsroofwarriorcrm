@@ -1,6 +1,28 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
+type FlowTypeKey = "job_status" | "production_status" | "milestone";
+
+async function getFlowId(flowType: FlowTypeKey): Promise<string> {
+  const { data, error } = await supabase
+    .from("custom_flows")
+    .select("id")
+    .eq("flow_type", flowType)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data?.id) throw new Error(`custom_flows missing flow_type=${flowType}`);
+  return data.id;
+}
+
+async function fetchFlowStages(flowType: FlowTypeKey, activeOnly: boolean) {
+  const flowId = await getFlowId(flowType);
+  let q = supabase.from("flow_stages").select("*").eq("flow_id", flowId).order("sequence", { ascending: true });
+  if (activeOnly) q = q.eq("active", true);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data ?? [];
+}
+
 export type LeadSource = {
   id: string;
   name: string;
@@ -102,11 +124,8 @@ export function useJobStatuses(activeOnly = false) {
   return useQuery({
     queryKey: ["job-statuses", activeOnly],
     queryFn: async () => {
-      let q = supabase.from("job_statuses").select("*").order("sequence");
-      if (activeOnly) q = q.eq("active", true);
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data ?? []) as JobStatus[];
+      const rows = await fetchFlowStages("job_status", activeOnly);
+      return rows as JobStatus[];
     },
   });
 }
@@ -115,13 +134,22 @@ export function useCreateJobStatus() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (js: Partial<JobStatus>) => {
+      const flowId = await getFlowId("job_status");
       const { data, error } = await supabase
-        .from("job_statuses")
-        .insert(js as any)
+        .from("flow_stages")
+        .insert({
+          flow_id: flowId,
+          name: js.name!,
+          display_name: js.display_name!,
+          sequence: js.sequence ?? 0,
+          color: js.color ?? "#6b7280",
+          active: js.active ?? true,
+          is_milestone: false,
+        } as any)
         .select()
         .single();
       if (error) throw error;
-      return data;
+      return data as JobStatus;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["job-statuses"] }),
   });
@@ -132,7 +160,7 @@ export function useUpdateJobStatus() {
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<JobStatus> & { id: string }) => {
       const { error } = await supabase
-        .from("job_statuses")
+        .from("flow_stages")
         .update(updates as any)
         .eq("id", id);
       if (error) throw error;
@@ -145,7 +173,7 @@ export function useDeleteJobStatus() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("job_statuses").delete().eq("id", id);
+      const { error } = await supabase.from("flow_stages").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["job-statuses"] }),
@@ -156,10 +184,9 @@ export function useBulkUpdateJobStatusOrder() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (statuses: { id: string; sequence: number }[]) => {
-      // Update each status sequence
       for (const s of statuses) {
         const { error } = await supabase
-          .from("job_statuses")
+          .from("flow_stages")
           .update({ sequence: s.sequence } as any)
           .eq("id", s.id);
         if (error) throw error;
@@ -209,17 +236,15 @@ export type ProductionMilestone = {
   display_name: string;
   sequence: number;
   active: boolean;
+  color?: string;
 };
 
 export function useProductionMilestones(activeOnly = false) {
   return useQuery({
     queryKey: ["production-milestones", activeOnly],
     queryFn: async () => {
-      let q = supabase.from("production_milestones").select("*").order("sequence");
-      if (activeOnly) q = q.eq("active", true);
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data ?? []) as ProductionMilestone[];
+      const rows = await fetchFlowStages("milestone", activeOnly);
+      return rows as ProductionMilestone[];
     },
   });
 }
@@ -228,13 +253,22 @@ export function useCreateProductionMilestone() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (m: Partial<ProductionMilestone>) => {
+      const flowId = await getFlowId("milestone");
       const { data, error } = await supabase
-        .from("production_milestones")
-        .insert(m as any)
+        .from("flow_stages")
+        .insert({
+          flow_id: flowId,
+          name: m.name!,
+          display_name: m.display_name!,
+          sequence: m.sequence ?? 0,
+          color: m.color ?? "#6b7280",
+          active: m.active ?? true,
+          is_milestone: true,
+        } as any)
         .select()
         .single();
       if (error) throw error;
-      return data;
+      return data as ProductionMilestone;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["production-milestones"] }),
   });
@@ -245,7 +279,7 @@ export function useUpdateProductionMilestone() {
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<ProductionMilestone> & { id: string }) => {
       const { error } = await supabase
-        .from("production_milestones")
+        .from("flow_stages")
         .update(updates as any)
         .eq("id", id);
       if (error) throw error;
@@ -258,7 +292,7 @@ export function useDeleteProductionMilestone() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("production_milestones").delete().eq("id", id);
+      const { error } = await supabase.from("flow_stages").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["production-milestones"] }),
@@ -271,7 +305,7 @@ export function useBulkUpdateMilestoneOrder() {
     mutationFn: async (milestones: { id: string; sequence: number }[]) => {
       for (const m of milestones) {
         const { error } = await supabase
-          .from("production_milestones")
+          .from("flow_stages")
           .update({ sequence: m.sequence } as any)
           .eq("id", m.id);
         if (error) throw error;
@@ -296,11 +330,8 @@ export function useProductionItemStatuses(activeOnly = false) {
   return useQuery({
     queryKey: ["production-item-statuses", activeOnly],
     queryFn: async () => {
-      let q = supabase.from("production_item_statuses").select("*").order("sequence");
-      if (activeOnly) q = q.eq("active", true);
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data ?? []) as ProductionItemStatus[];
+      const rows = await fetchFlowStages("production_status", activeOnly);
+      return rows as ProductionItemStatus[];
     },
   });
 }
@@ -309,13 +340,22 @@ export function useCreateProductionItemStatus() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (s: Partial<ProductionItemStatus>) => {
+      const flowId = await getFlowId("production_status");
       const { data, error } = await supabase
-        .from("production_item_statuses")
-        .insert(s as any)
+        .from("flow_stages")
+        .insert({
+          flow_id: flowId,
+          name: s.name!,
+          display_name: s.display_name!,
+          sequence: s.sequence ?? 0,
+          color: s.color ?? "#6b7280",
+          active: s.active ?? true,
+          is_milestone: false,
+        } as any)
         .select()
         .single();
       if (error) throw error;
-      return data;
+      return data as ProductionItemStatus;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["production-item-statuses"] }),
   });
@@ -326,7 +366,7 @@ export function useUpdateProductionItemStatus() {
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<ProductionItemStatus> & { id: string }) => {
       const { error } = await supabase
-        .from("production_item_statuses")
+        .from("flow_stages")
         .update(updates as any)
         .eq("id", id);
       if (error) throw error;
@@ -339,7 +379,7 @@ export function useDeleteProductionItemStatus() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("production_item_statuses").delete().eq("id", id);
+      const { error } = await supabase.from("flow_stages").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["production-item-statuses"] }),
@@ -352,7 +392,7 @@ export function useBulkUpdateProductionItemStatusOrder() {
     mutationFn: async (statuses: { id: string; sequence: number }[]) => {
       for (const s of statuses) {
         const { error } = await supabase
-          .from("production_item_statuses")
+          .from("flow_stages")
           .update({ sequence: s.sequence } as any)
           .eq("id", s.id);
         if (error) throw error;

@@ -1,18 +1,23 @@
 import { useMemo, useState } from "react";
 import {
-  useProductionItems,
   useCreateProductionItem,
   useUpdateProductionItem,
   useDeleteProductionItem,
   useTradeTypes,
   type ProductionItem,
   type CrewAssignment,
+  type MaterialLogistics,
   parseCrewAssigned,
   parseScopeMetadata,
+  parseMaterialLogistics,
 } from "@/hooks/useProduction";
+import type { Draw } from "@/hooks/useDraws";
 import { useProductionItemStatuses } from "@/hooks/useCustomizations";
 import { useAllProfiles } from "@/hooks/useHierarchy";
-import { usePaymentChecks } from "@/hooks/usePaymentChecks";
+import { computeWarRoomQualificationMetrics } from "@/lib/qualificationCalculations";
+import { worstQualificationStatus } from "@/lib/productionRollups";
+import { mergeJobOrderingLines } from "@/lib/jobOrderingTemplate";
+import { buildJobOrderingWorksheetCsv } from "@/lib/orderFormCsv";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -24,13 +29,22 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Trash2, Plus, PanelRight, Download } from "lucide-react";
+import { Trash2, Plus, PanelRight, Download, ArrowRightLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { lineEstimatedExposure } from "@/lib/productionRollups";
+import type { Qualification } from "@/hooks/useJobProduction";
+import type { PlanningJobSquares } from "@/lib/roofSquares";
+import { resolvePlanningRoofSquares } from "@/lib/roofSquares";
 
 const QUALIFICATION_GATES = ["Pending", "Go", "Hold", "Supplement"] as const;
 const MATERIAL_ORDER = ["Not Ordered", "Ordered", "Delivered"] as const;
+
+const JOB_GATE_BADGE: Record<string, string> = {
+  Go: "bg-success/20 text-success-foreground border-success/30",
+  Hold: "bg-destructive/20 text-destructive-foreground border-destructive/30",
+  Supplement: "bg-warning/20 text-warning-foreground border-warning/30",
+};
 
 const CREW_ROLES = [
   { value: "foreman", label: "Foreman" },
@@ -65,6 +79,7 @@ function normalizeItem(i: ProductionItem): ProductionItem {
     ...i,
     qualification_status: i.qualification_status ?? "Pending",
     material_order_status: i.material_order_status ?? "Not Ordered",
+    material_logistics: i.material_logistics ?? {},
     drop_location: i.drop_location ?? "",
     sol_notes: i.sol_notes ?? "",
     crew_assigned: i.crew_assigned ?? [],
@@ -72,13 +87,31 @@ function normalizeItem(i: ProductionItem): ProductionItem {
   };
 }
 
-export function ProductionItemsTab({ jobId }: { jobId: string }) {
+interface ProductionItemsTabProps {
+  jobId: string;
+  jobDisplayId?: string;
+  planningJobSquares: PlanningJobSquares;
+  qualification: Qualification;
+  productionItems: ProductionItem[];
+  draws: Draw[];
+  receivedChecksTotal: number;
+  productionItemsLoading?: boolean;
+}
+
+export function ProductionItemsTab({
+  jobId,
+  jobDisplayId,
+  planningJobSquares,
+  qualification,
+  productionItems: items,
+  draws,
+  receivedChecksTotal,
+  productionItemsLoading = false,
+}: ProductionItemsTabProps) {
   const { toast } = useToast();
-  const { data: items = [], isLoading } = useProductionItems(jobId);
   const { data: trades = [] } = useTradeTypes();
   const { data: statuses = [] } = useProductionItemStatuses();
   const { data: profiles = [] } = useAllProfiles();
-  const { data: checks = [] } = usePaymentChecks(jobId);
 
   const createItem = useCreateProductionItem();
   const updateItem = useUpdateProductionItem();
@@ -99,13 +132,21 @@ export function ProductionItemsTab({ jobId }: { jobId: string }) {
 
   const [workbookId, setWorkbookId] = useState<string | null>(null);
   const [exportSelected, setExportSelected] = useState<Record<string, boolean>>({});
+  const [syncingPlanningSq, setSyncingPlanningSq] = useState(false);
 
   const normalizedItems = useMemo(() => (items as ProductionItem[]).map(normalizeItem), [items]);
+  const planningSq = useMemo(
+    () => resolvePlanningRoofSquares(planningJobSquares, qualification as Record<string, unknown>),
+    [planningJobSquares, qualification],
+  );
   const workbookItem = workbookId ? normalizedItems.find((i) => i.id === workbookId) : null;
 
-  const receivedChecksTotal = checks
-    .filter((c) => c.status === "Received" || c.status === "Deposited")
-    .reduce((s, c) => s + (Number(c.amount) || 0), 0);
+  const metrics = useMemo(
+    () => computeWarRoomQualificationMetrics(qualification, draws, receivedChecksTotal, planningJobSquares),
+    [qualification, draws, receivedChecksTotal, planningJobSquares],
+  );
+  const worstLineGate = worstQualificationStatus(normalizedItems);
+  const jobGateClass = JOB_GATE_BADGE[metrics.jobLevelGate] || JOB_GATE_BADGE.Hold;
 
   const totalLabor = normalizedItems.reduce((sum, i) => sum + (i.labor_cost || 0), 0);
   const totalMaterial = normalizedItems.reduce((sum, i) => sum + (i.material_cost || 0), 0);
@@ -156,7 +197,59 @@ export function ProductionItemsTab({ jobId }: { jobId: string }) {
     updateItem.mutate({ id, ...partial });
   };
 
-  const exportOrderForm = () => {
+  const handleSyncPlanningToWarRoom = async () => {
+    if (planningSq <= 0) {
+      toast({
+        title: "Set planning SQ first",
+        description: "Enter master planning squares on the Measurements tab (calculator or GAF PDF import).",
+        variant: "destructive",
+      });
+      return;
+    }
+    const sqUnitLines = normalizedItems.filter((i) => (i.unit_type || "").toUpperCase() === "SQ");
+    const targets = sqUnitLines.length > 0 ? sqUnitLines : normalizedItems;
+    if (targets.length === 0) {
+      toast({ title: "No production lines to update", variant: "destructive" });
+      return;
+    }
+    setSyncingPlanningSq(true);
+    try {
+      for (const item of targets) {
+        await updateItem.mutateAsync({ id: item.id, quantity: planningSq });
+      }
+      toast({
+        title: "Sync to War Room complete",
+        description: `${targets.length} line(s) set to ${planningSq} planning SQ${
+          sqUnitLines.length === 0 ? " (no SQ unit lines — all lines updated)" : ""
+        }.`,
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Update failed";
+      toast({ title: "Error", description: msg, variant: "destructive" });
+    } finally {
+      setSyncingPlanningSq(false);
+    }
+  };
+
+  const exportOrderingWorksheet = () => {
+    const orderingLines = mergeJobOrderingLines(qualification.job_ordering_lines);
+    const { csv, filename } = buildJobOrderingWorksheetCsv({
+      jobDisplayId,
+      jobId,
+      planningSq,
+      orderingLines,
+    });
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Order worksheet CSV downloaded (same as Qualification tab)" });
+  };
+
+  const exportProductionLinesCsv = () => {
     const selected = normalizedItems.filter((i) => exportSelected[i.id]);
     const rows = selected.length > 0 ? selected : normalizedItems;
     if (rows.length === 0) {
@@ -175,9 +268,15 @@ export function ProductionItemsTab({ jobId }: { jobId: string }) {
       "DropLocation",
       "MaterialOrderStatus",
       "QualificationGate",
+      "PONumber",
+      "Carrier",
+      "TrackingNumber",
+      "TrackingURL",
+      "LogisticsNotes",
     ];
-    const lines = rows.map((i) =>
-      [
+    const lines = rows.map((i) => {
+      const log = parseMaterialLogistics(i.material_logistics);
+      return [
         i.trade_types?.name ?? "",
         i.scope_description ?? "",
         String(i.quantity ?? ""),
@@ -189,23 +288,93 @@ export function ProductionItemsTab({ jobId }: { jobId: string }) {
         i.drop_location ?? "",
         i.material_order_status ?? "",
         i.qualification_status ?? "",
-      ].map((c) => csvEscape(String(c)))
-    );
-    const csv = [headers.join(","), ...lines.map((r) => r.join(","))].join("\n");
+        log.po_number ?? "",
+        log.carrier ?? "",
+        log.tracking_number ?? "",
+        log.tracking_url ?? "",
+        log.notes ?? "",
+      ].map((c) => csvEscape(String(c)));
+    });
+    const idLabel = jobDisplayId || jobId.slice(0, 8);
+    const planningLabel = planningSq > 0 ? String(planningSq) : "";
+    const metaRows: string[][] = [
+      ["Job", idLabel],
+      ["Exported", format(new Date(), "yyyy-MM-dd HH:mm")],
+      ["Planning roof SQ", planningLabel],
+      [],
+    ];
+    const csv = [
+      ...metaRows.map((r) => r.map((c) => csvEscape(String(c))).join(",")),
+      headers.join(","),
+      ...lines.map((r) => r.join(",")),
+    ].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `order-form-${jobId.slice(0, 8)}.csv`;
+    a.download = `production-lines-${jobId.slice(0, 8)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "Order form CSV downloaded" });
+    toast({ title: "Production lines CSV downloaded" });
   };
 
-  if (isLoading) return <div className="py-12 text-center text-muted-foreground">Loading production lines...</div>;
+  if (productionItemsLoading) return <div className="py-12 text-center text-muted-foreground">Loading production lines...</div>;
 
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">War Room gates & funds</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Job-level gate reflects qualification math vs checks. Worst line gate rolls up production line statuses.
+          </p>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-md border bg-muted/30 px-3 py-2">
+            <p className="text-[10px] uppercase text-muted-foreground">Job gate</p>
+            <Badge className={`mt-1 border ${jobGateClass}`}>{metrics.jobLevelGate}</Badge>
+          </div>
+          <div className="rounded-md border bg-muted/30 px-3 py-2">
+            <p className="text-[10px] uppercase text-muted-foreground">Worst line gate</p>
+            {worstLineGate ? (
+              <Badge variant="outline" className={`mt-1 ${gateBadgeClass(worstLineGate)}`}>
+                {worstLineGate}
+              </Badge>
+            ) : (
+              <p className="mt-1 text-sm text-muted-foreground">—</p>
+            )}
+          </div>
+          <div className="rounded-md border bg-muted/30 px-3 py-2">
+            <p className="text-[10px] uppercase text-muted-foreground">Planning roof SQ</p>
+            <p className="mt-1 font-mono text-lg font-semibold">{planningSq > 0 ? planningSq.toLocaleString() : "—"}</p>
+          </div>
+          <div className="rounded-md border bg-muted/30 px-3 py-2">
+            <p className="text-[10px] uppercase text-muted-foreground">Funds received</p>
+            <p className="mt-1 font-mono text-lg font-semibold">${metrics.fundsReceived.toLocaleString()}</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="flex flex-col gap-4 rounded-2xl border bg-card p-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-widest text-muted-foreground">Planning roof SQ</p>
+          <p className="text-2xl font-bold tabular-nums">{planningSq > 0 ? planningSq.toLocaleString() : "—"}</p>
+          <p className="text-[10px] text-muted-foreground">
+            From Measurements master (<span className="font-mono">squares_estimated</span>) via the planning resolver. Sync sets line quantity on SQ-unit lines (or all lines if none).
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="min-h-[44px] w-full shrink-0 sm:w-auto"
+          disabled={syncingPlanningSq || updateItem.isPending}
+          onClick={() => void handleSyncPlanningToWarRoom()}
+        >
+          <ArrowRightLeft className="mr-2 h-4 w-4" />
+          {syncingPlanningSq ? "Syncing…" : "Sync to War Room"}
+        </Button>
+      </div>
       <div className="grid grid-cols-1 gap-4 rounded-2xl border bg-card p-6 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <p className="text-xs uppercase tracking-widest text-muted-foreground">Total Labor</p>
@@ -228,9 +397,13 @@ export function ProductionItemsTab({ jobId }: { jobId: string }) {
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={exportOrderForm}>
+        <Button type="button" size="sm" onClick={exportOrderingWorksheet}>
           <Download className="mr-2 h-4 w-4" />
-          Export order form (CSV)
+          Generate order worksheet (CSV)
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={exportProductionLinesCsv}>
+          <Download className="mr-2 h-4 w-4" />
+          Export production lines (CSV)
         </Button>
       </div>
 
@@ -285,7 +458,7 @@ export function ProductionItemsTab({ jobId }: { jobId: string }) {
                 <TableHead>Trade</TableHead>
                 <TableHead>Scope</TableHead>
                 <TableHead className="w-16">Qty</TableHead>
-                <TableHead>Gate</TableHead>
+                <TableHead className="min-w-[124px]">Gate</TableHead>
                 <TableHead>Materials</TableHead>
                 <TableHead>Delivery</TableHead>
                 <TableHead className="w-28">Total $</TableHead>
@@ -302,16 +475,28 @@ export function ProductionItemsTab({ jobId }: { jobId: string }) {
                       <Checkbox
                         checked={!!exportSelected[item.id]}
                         onCheckedChange={(c) => setExportSelected((prev) => ({ ...prev, [item.id]: !!c }))}
-                        aria-label="Include in export"
+                        aria-label="Include in production lines export"
                       />
                     </TableCell>
                     <TableCell className="font-medium">{item.trade_types?.name || "—"}</TableCell>
                     <TableCell className="max-w-[200px] truncate text-muted-foreground">{item.scope_description || "—"}</TableCell>
                     <TableCell>{item.quantity}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={gateBadgeClass(gate)}>
-                        {gate}
-                      </Badge>
+                    <TableCell className="p-2">
+                      <Select
+                        value={gate}
+                        onValueChange={(v) => patchItem(item.id, { qualification_status: v })}
+                      >
+                        <SelectTrigger className={`h-8 w-[118px] text-xs ${gateBadgeClass(gate)} border`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {QUALIFICATION_GATES.map((g) => (
+                            <SelectItem key={g} value={g}>
+                              {g}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell className="text-xs">{item.material_order_status || "—"}</TableCell>
                     <TableCell className="text-xs whitespace-nowrap">
@@ -376,6 +561,11 @@ function WarRoomWorkbook({
 }) {
   const meta = parseScopeMetadata(item.scope_metadata);
   const crew = parseCrewAssigned(item.crew_assigned);
+  const logistics = parseMaterialLogistics(item.material_logistics);
+
+  const patchLogistics = (patch: Partial<MaterialLogistics>) => {
+    onPatch({ material_logistics: { ...logistics, ...patch } });
+  };
 
   const exposure = lineEstimatedExposure(item);
   const vsChecks = exposure - receivedChecksTotal;
@@ -520,8 +710,11 @@ function WarRoomWorkbook({
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <Label className="text-xs">Shingle / product</Label>
-              <Input value={String(meta.shingle_style ?? "")} onChange={(e) => setMeta("shingle_style", e.target.value)} />
+              <Label className="text-xs">Shingle type</Label>
+              <Input
+                value={String(meta.shingle_type ?? meta.shingle_style ?? "")}
+                onChange={(e) => setMeta("shingle_type", e.target.value)}
+              />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Manufacturer</Label>
@@ -607,6 +800,39 @@ function WarRoomWorkbook({
           <div className="space-y-1">
             <Label className="text-xs">Drop location</Label>
             <Input value={item.drop_location ?? ""} onChange={(e) => onPatch({ drop_location: e.target.value })} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">PO number</Label>
+              <Input value={logistics.po_number ?? ""} onChange={(e) => patchLogistics({ po_number: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Carrier</Label>
+              <Input value={logistics.carrier ?? ""} onChange={(e) => patchLogistics({ carrier: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Tracking #</Label>
+              <Input
+                value={logistics.tracking_number ?? ""}
+                onChange={(e) => patchLogistics({ tracking_number: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Tracking URL</Label>
+              <Input
+                value={logistics.tracking_url ?? ""}
+                onChange={(e) => patchLogistics({ tracking_url: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Delivery / logistics notes</Label>
+            <Textarea
+              value={logistics.notes ?? ""}
+              onChange={(e) => patchLogistics({ notes: e.target.value })}
+              rows={2}
+              placeholder="Received by, dock time, damage notes..."
+            />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">

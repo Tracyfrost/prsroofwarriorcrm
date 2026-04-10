@@ -18,6 +18,7 @@ const DEFAULT_PHRASES: Record<string, string> = {
   export: "Extract Intel!",
   upload: "Deploy Asset!",
   // Nav
+  nav_my_profile: "Your profile and account",
   nav_dashboard: "Go to Command Center dashboard",
   nav_customers: "View and manage customers",
   nav_jobs: "View and manage jobs (Operations)",
@@ -36,6 +37,8 @@ const DEFAULT_PHRASES: Record<string, string> = {
   nav_settings: "App and team settings",
   close_sidebar: "Close menu",
   open_menu: "Open menu",
+  collapse_sidebar: "Collapse sidebar",
+  expand_sidebar: "Expand sidebar",
   sign_out: "Sign out of your account",
   // Job detail
   back_to_jobs: "Return to jobs list",

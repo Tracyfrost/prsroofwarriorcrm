@@ -1,7 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { PageWrapper } from "@/components/PageWrapper";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -32,7 +32,13 @@ export default function Customers() {
   const [cityFilter, setCityFilter] = useState("");
   const [stateFilter, setStateFilter] = useState("");
   const [insuranceFilter, setInsuranceFilter] = useState("");
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const q = searchParams.get("search");
+    if (q != null && q !== "") setSearch(q);
+  }, [searchParams]);
   const { data: jobCounts = {} } = useCustomerJobCounts();
   const { data: leadSources = [] } = useLeadSources();
   const { can } = usePermissions();
@@ -86,12 +92,12 @@ export default function Customers() {
         spouseName.includes(q) ||
         (c.customer_number || "").toLowerCase().includes(q) ||
         getEmails(c).some((e: string) => e.toLowerCase().includes(q)) ||
-        getPhones(c).some((p: string) => p.includes(search)) ||
+        getPhones(c).some((p: string) => p.toLowerCase().includes(q)) ||
         (c.insurance_carrier || "").toLowerCase().includes(q) ||
         ((c.main_address as any)?.city || "").toLowerCase().includes(q) ||
         ((c.main_address as any)?.state || "").toLowerCase().includes(q) ||
         ((c.main_address as any)?.street || "").toLowerCase().includes(q) ||
-        ((c.main_address as any)?.zip || "").includes(search);
+        ((c.main_address as any)?.zip || "").toLowerCase().includes(q);
 
       const addr = c.main_address as any;
       const matchesCity = !cityFilter || (addr?.city || "") === cityFilter;

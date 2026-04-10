@@ -20,6 +20,7 @@ import { useAllProfiles } from "@/hooks/useHierarchy";
 import { useToast } from "@/hooks/use-toast";
 import { ProductionBoard } from "@/components/ProductionBoard";
 import { ProductionList } from "@/components/ProductionList";
+import { cn } from "@/lib/utils";
 
 export default function Production() {
   const [view, setView] = useState<"list" | "board">("board");
@@ -225,15 +226,21 @@ export default function Production() {
           </BattleTooltip>
         </div>
 
-        {/* Filters */}
-        <div className="mb-4 flex flex-col gap-3">
+        {/* Filters — sticky under app chrome (mobile header / desktop search) */}
+        <div
+          className={cn(
+            "sticky top-14 z-30 -mx-4 mb-6 flex flex-col gap-3 rounded-lg border border-border/80 bg-card/95 px-4 py-3 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-card/90",
+            "sm:-mx-6 sm:px-6",
+            "lg:top-12 lg:-mx-8 lg:px-8",
+          )}
+        >
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative max-w-sm flex-1 min-w-[200px]">
+            <div className="relative w-full min-w-0 sm:max-w-sm sm:flex-1 sm:min-w-[200px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full min-w-0 sm:w-36"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Statuses</SelectItem>
                 {productionStatuses.map((s) => (
@@ -242,7 +249,7 @@ export default function Production() {
               </SelectContent>
             </Select>
             <Select value={tradeFilter} onValueChange={setTradeFilter}>
-              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full min-w-0 sm:w-36"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Trades</SelectItem>
                 {tradeTypes.map((tt) => (
@@ -251,7 +258,7 @@ export default function Production() {
               </SelectContent>
             </Select>
             <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
-              <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full min-w-0 sm:w-40"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Assignees</SelectItem>
                 {profiles.map((p) => (
@@ -260,7 +267,7 @@ export default function Production() {
               </SelectContent>
             </Select>
             <Select value={gateFilter} onValueChange={setGateFilter}>
-              <SelectTrigger className="w-36"><SelectValue placeholder="Gate" /></SelectTrigger>
+              <SelectTrigger className="w-full min-w-0 sm:w-36"><SelectValue placeholder="Gate" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All gates</SelectItem>
                 <SelectItem value="Pending">Pending</SelectItem>
@@ -270,7 +277,7 @@ export default function Production() {
               </SelectContent>
             </Select>
             <Select value={materialFilter} onValueChange={setMaterialFilter}>
-              <SelectTrigger className="w-40"><SelectValue placeholder="Materials" /></SelectTrigger>
+              <SelectTrigger className="w-full min-w-0 sm:w-40"><SelectValue placeholder="Materials" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All material states</SelectItem>
                 <SelectItem value="Not Ordered">Not Ordered</SelectItem>
@@ -278,7 +285,7 @@ export default function Production() {
                 <SelectItem value="Delivered">Delivered</SelectItem>
               </SelectContent>
             </Select>
-            <div className="flex border rounded-lg overflow-hidden">
+            <div className="flex shrink-0 border rounded-lg overflow-hidden">
               <BattleTooltip phraseKey="view_board_production">
                 <button
                   onClick={() => setView("board")}
@@ -299,21 +306,21 @@ export default function Production() {
           </div>
           {/* Date range row */}
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-1 basis-[140px] items-center gap-2 sm:flex-initial sm:basis-auto">
               <Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label>
-              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 w-36 text-xs" />
+              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 min-w-0 flex-1 text-xs sm:w-36 sm:flex-initial" />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-1 basis-[140px] items-center gap-2 sm:flex-initial sm:basis-auto">
               <Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label>
-              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 w-36 text-xs" />
+              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 min-w-0 flex-1 text-xs sm:w-36 sm:flex-initial" />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-1 basis-[160px] items-center gap-2 sm:flex-initial sm:basis-auto">
               <Label className="text-xs text-muted-foreground whitespace-nowrap">Delivery from</Label>
-              <Input type="date" value={deliveryFrom} onChange={(e) => setDeliveryFrom(e.target.value)} className="h-9 w-36 text-xs" />
+              <Input type="date" value={deliveryFrom} onChange={(e) => setDeliveryFrom(e.target.value)} className="h-9 min-w-0 flex-1 text-xs sm:w-36 sm:flex-initial" />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-1 basis-[160px] items-center gap-2 sm:flex-initial sm:basis-auto">
               <Label className="text-xs text-muted-foreground whitespace-nowrap">Delivery to</Label>
-              <Input type="date" value={deliveryTo} onChange={(e) => setDeliveryTo(e.target.value)} className="h-9 w-36 text-xs" />
+              <Input type="date" value={deliveryTo} onChange={(e) => setDeliveryTo(e.target.value)} className="h-9 min-w-0 flex-1 text-xs sm:w-36 sm:flex-initial" />
             </div>
             {hasFilters && (
               <Button variant="ghost" size="sm" className="text-xs h-8" onClick={clearFilters}>

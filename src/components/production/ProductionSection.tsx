@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MilestonesTab } from "@/components/production/MilestonesTab";
+import MilestonesMainTab from "@/components/job/MilestonesMainTab";
+import MilestonesSubTab from "@/components/job/MilestonesSubTab";
 import { MeasurementsTab } from "@/components/production/MeasurementsTab";
 import { QualificationTab } from "@/components/production/QualificationTab";
 import { OverviewTab } from "@/components/production/OverviewTab";
@@ -14,9 +15,10 @@ import { useJobExpenses } from "@/hooks/useJobExpenses";
 import { useDraws } from "@/hooks/useDraws";
 import type { Qualification } from "@/hooks/useJobProduction";
 import type { JobTracking } from "@/hooks/useJobTracking";
-import type { PlanningJobSquares } from "@/lib/roofSquares";
-import { Clock, Ruler, ShieldCheck, BarChart3, Hammer, FileSpreadsheet, Shield, ScrollText, DollarSign } from "lucide-react";
+import { resolvePlanningRoofSquares, type PlanningJobSquares } from "@/lib/roofSquares";
+import { Clock, Ruler, ShieldCheck, BarChart3, Hammer, FileSpreadsheet, Shield, ScrollText, DollarSign, FileText } from "lucide-react";
 import { JobLogsTab } from "@/components/production/JobLogsTab";
+import { DocumentsPanel } from "@/components/DocumentsPanel";
 
 interface Props {
   jobId: string;
@@ -24,7 +26,6 @@ interface Props {
   jobDisplayId?: string;
   milestones: Record<string, string | null>;
   qualification: Qualification;
-  numberOfSquares: number;
   /** Raw `jobs.number_of_squares` for planning SQ fallback */
   numberOfSquaresRaw?: number | null;
   squaresEstimated?: number | null;
@@ -38,7 +39,7 @@ interface Props {
   carrierFromCustomer?: string | null;
 }
 
-export function ProductionSection({ jobId, jobDisplayId, milestones, qualification, numberOfSquares, numberOfSquaresRaw, squaresEstimated, squaresActualInstalled, squaresFinal, assignments, profileMap, tracking, isMainJob = true, parentClaimNumber, carrierFromCustomer }: Props) {
+export function ProductionSection({ jobId, jobDisplayId, milestones, qualification, numberOfSquaresRaw, squaresEstimated, squaresActualInstalled, squaresFinal, assignments, profileMap, tracking, isMainJob = true, parentClaimNumber, carrierFromCustomer }: Props) {
   const planningJobSquares: PlanningJobSquares = useMemo(
     () => ({
       squares_estimated: squaresEstimated ?? null,
@@ -49,7 +50,12 @@ export function ProductionSection({ jobId, jobDisplayId, milestones, qualificati
     [squaresEstimated, squaresActualInstalled, squaresFinal, numberOfSquaresRaw],
   );
 
-  const { data: productionItems = [] } = useProductionItems(jobId);
+  const planningRoofSquares = useMemo(
+    () => resolvePlanningRoofSquares(planningJobSquares, qualification as Record<string, unknown>),
+    [planningJobSquares, qualification],
+  );
+
+  const { data: productionItems = [], isLoading: productionItemsLoading } = useProductionItems(jobId);
   const { data: checks = [] } = usePaymentChecks(jobId);
   const { data: itemizedExpenses = [] } = useJobExpenses(jobId);
   const { data: draws = [] } = useDraws(jobId);
@@ -75,6 +81,12 @@ export function ProductionSection({ jobId, jobDisplayId, milestones, qualificati
           className="flex items-center gap-1.5 text-xs min-h-[48px] sm:min-h-0 px-3 py-2 border-b-2 border-transparent text-[var(--wc-muted)] data-[state=active]:text-[var(--wc-ink)] data-[state=active]:border-b-[var(--wc-amber)] data-[state=active]:bg-transparent hover:text-[var(--wc-ink)] hover:bg-[var(--wc-surface-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
         >
           <Hammer className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> War Room
+        </TabsTrigger>
+        <TabsTrigger
+          value="job-files"
+          className="flex items-center gap-1.5 text-xs min-h-[48px] sm:min-h-0 px-3 py-2 border-b-2 border-transparent text-[var(--wc-muted)] data-[state=active]:text-[var(--wc-ink)] data-[state=active]:border-b-[var(--wc-amber)] data-[state=active]:bg-transparent hover:text-[var(--wc-ink)] hover:bg-[var(--wc-surface-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
+        >
+          <FileText className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> Job files
         </TabsTrigger>
         <TabsTrigger
           value="milestones"
@@ -125,7 +137,7 @@ export function ProductionSection({ jobId, jobDisplayId, milestones, qualificati
           milestones={milestones}
           checks={checks}
           qualification={qualification}
-          numberOfSquares={numberOfSquares}
+          planningRoofSquares={planningRoofSquares}
           productionItems={productionItems}
           assignments={assignments}
           profileMap={profileMap}
@@ -136,21 +148,31 @@ export function ProductionSection({ jobId, jobDisplayId, milestones, qualificati
       </TabsContent>
 
       <TabsContent value="war-room" className="mt-4">
-        <ProductionItemsTab jobId={jobId} />
+        <ProductionItemsTab
+          jobId={jobId}
+          jobDisplayId={jobDisplayId}
+          planningJobSquares={planningJobSquares}
+          qualification={qualification}
+          productionItems={productionItems}
+          draws={draws}
+          receivedChecksTotal={receivedChecksTotal}
+          productionItemsLoading={productionItemsLoading}
+        />
+      </TabsContent>
+
+      <TabsContent value="job-files" className="mt-4">
+        <DocumentsPanel jobId={jobId} />
       </TabsContent>
 
       <TabsContent value="milestones" className="mt-4">
-        <MilestonesTab jobId={jobId} milestones={milestones} />
+        <div className="space-y-8">
+          <MilestonesMainTab jobId={jobId} />
+          <MilestonesSubTab jobId={jobId} />
+        </div>
       </TabsContent>
 
       <TabsContent value="measurements" className="mt-4">
-        <MeasurementsTab
-          jobId={jobId}
-          numberOfSquares={numberOfSquares}
-          squaresEstimated={squaresEstimated}
-          squaresActualInstalled={squaresActualInstalled}
-          squaresFinal={squaresFinal}
-        />
+        <MeasurementsTab jobId={jobId} />
       </TabsContent>
 
       <TabsContent value="qualification" className="mt-4">

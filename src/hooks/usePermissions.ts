@@ -71,6 +71,7 @@ function resolvePermissions(level: UserLevel, roles: string[]): Set<Permission> 
     perms.add("view_all");
     perms.add("add_customer");
     perms.add("add_appointment");
+    perms.add("edit_appointment");
     perms.add("view_commissions");
     perms.add("view_production");
     perms.add("view_reports");

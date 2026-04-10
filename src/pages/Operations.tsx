@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { format } from "date-fns";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,13 +24,13 @@ import {
 import { ResponsiveModal } from "@/components/ui/responsive-modal";
 import { AddressLink } from "@/components/AddressLink";
 import { CreateJobModal } from "@/components/jobs/CreateJobModal";
-import { DocumentsPanel } from "@/components/DocumentsPanel";
 import { SiteCamGallery } from "@/components/sitecam/SiteCamGallery";
 import { ProductionSection } from "@/components/production/ProductionSection";
 import { DualWorkflowStatusBar } from "@/components/job/DualWorkflowStatusBar";
+import MilestonesMainTab from "@/components/job/MilestonesMainTab";
+import MilestonesSubTab from "@/components/job/MilestonesSubTab";
 import {
   useAppointments,
-  useCreateAppointment,
   useCreateJobAssignment,
   useDeleteJobAssignment,
   useJob,
@@ -47,10 +46,9 @@ import { useJobStatuses } from "@/hooks/useCustomizations";
 import { useUserRoles } from "@/hooks/useProfile";
 import { useToast } from "@/hooks/use-toast";
 import type { Qualification } from "@/hooks/useJobProduction";
-import { getSquaresReported } from "@/lib/reports/repResolution";
+import { JobAppointmentsBlock } from "@/components/appointments/JobAppointmentsBlock";
 import {
   ArrowLeft,
-  Calendar,
   Camera,
   DollarSign,
   Hammer,
@@ -86,7 +84,6 @@ export default function Operations() {
   const { data: branches = [] } = useStatusBranches();
   const { data: tradeTypes = [] } = useTradeTypes();
   const updateJob = useUpdateJob();
-  const createAppointment = useCreateAppointment();
   const createAssignment = useCreateJobAssignment();
   const deleteAssignment = useDeleteJobAssignment();
   const softDeleteJob = useSoftDeleteJob();
@@ -96,8 +93,6 @@ export default function Operations() {
   const [activeTab, setActiveTab] = useState("overview");
   const [assignUserId, setAssignUserId] = useState("");
   const [assignRole, setAssignRole] = useState("primary_rep");
-  const [apptDate, setApptDate] = useState("");
-  const [apptOutcome, setApptOutcome] = useState("");
   const [notesDraft, setNotesDraft] = useState<string | null>(null);
   const [tradesModalOpen, setTradesModalOpen] = useState(false);
   const [selectedTrades, setSelectedTrades] = useState<string[]>([]);
@@ -197,22 +192,6 @@ export default function Operations() {
     try {
       await deleteAssignment.mutateAsync({ id: assignmentId, jobId: job.id });
       toast({ title: "Assignment removed" });
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    }
-  };
-
-  const handleAddAppointment = async () => {
-    if (!apptDate) return;
-    try {
-      await createAppointment.mutateAsync({
-        job_id: job.id,
-        date_time: new Date(apptDate).toISOString(),
-        outcome: apptOutcome,
-      });
-      setApptDate("");
-      setApptOutcome("");
-      toast({ title: "Milestone added" });
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     }
@@ -451,6 +430,8 @@ export default function Operations() {
                     </CardContent>
                   </Card>
 
+                  <JobAppointmentsBlock layout="sidebar" jobId={job.id} appointments={appointments} />
+
                   <Card>
                     <CardHeader>
                       <CardTitle>SiteCam</CardTitle>
@@ -504,32 +485,12 @@ export default function Operations() {
             </TabsContent>
 
             <TabsContent value="milestones" className="mt-6 space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4" />
-                    Milestones Timeline
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    {appointments.length === 0 && <p className="text-sm text-muted-foreground">No milestones yet.</p>}
-                    {appointments.map((appointment: any) => (
-                      <div key={appointment.id} className="rounded-lg border p-3">
-                        <p className="font-medium">{format(new Date(appointment.date_time), "MMM d, yyyy h:mm a")}</p>
-                        {appointment.outcome && <p className="text-sm text-muted-foreground">{appointment.outcome}</p>}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 border-t pt-4 md:grid-cols-3">
-                    <Input type="datetime-local" value={apptDate} onChange={(e) => setApptDate(e.target.value)} />
-                    <Input value={apptOutcome} placeholder="Outcome / notes" onChange={(e) => setApptOutcome(e.target.value)} />
-                    <Button className="min-h-[44px]" onClick={handleAddAppointment} disabled={!apptDate}>
-                      Add Milestone
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+              <div className="space-y-8">
+                <MilestonesMainTab jobId={job.id} />
+                <MilestonesSubTab jobId={job.id} />
+              </div>
+
+              <JobAppointmentsBlock jobId={job.id} appointments={appointments} />
 
               <Card>
                 <CardHeader>
@@ -567,7 +528,6 @@ export default function Operations() {
                 jobDisplayId={(job as any).job_id}
                 milestones={(job as any).production_milestones ?? {}}
                 qualification={((job as any).qualification ?? {}) as Qualification}
-                numberOfSquares={getSquaresReported(job as any)}
                 numberOfSquaresRaw={(job as any).number_of_squares ?? null}
                 squaresEstimated={(job as any).squares_estimated ?? null}
                 squaresActualInstalled={(job as any).squares_actual_installed ?? null}
@@ -593,7 +553,6 @@ export default function Operations() {
                   <MetricCard label="Sub Jobs RCV" value={currency(subsRcv)} />
                 </CardContent>
               </Card>
-              <DocumentsPanel jobId={job.id} />
             </TabsContent>
 
             <TabsContent value="sitecam" className="mt-6">

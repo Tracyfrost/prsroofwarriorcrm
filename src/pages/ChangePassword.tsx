@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { PasswordInput } from "@/components/PasswordInput";
+import { PasswordInput } from "@/components/ui/password-input";   // ← Fixed import
 import { useToast } from "@/hooks/use-toast";
 import { HardHat, Loader2, Lock } from "lucide-react";
 
@@ -13,38 +13,61 @@ export default function ChangePassword() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (newPassword.length < 8) {
-      toast({ title: "Password too short", description: "Must be at least 8 characters", variant: "destructive" });
+      toast({
+        title: "Password too short",
+        description: "Must be at least 8 characters",
+        variant: "destructive",
+      });
       return;
     }
+
     if (newPassword !== confirmPassword) {
-      toast({ title: "Passwords don't match", variant: "destructive" });
+      toast({
+        title: "Passwords don't match",
+        variant: "destructive",
+      });
       return;
     }
 
     setLoading(true);
+
     try {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
 
       // Clear the must_change_password flag
       if (user) {
-        await supabase
+        const { error: profileError } = await supabase
           .from("profiles")
           .update({ must_change_password: false })
-          .eq("user_id", user.id);
+          .eq("id", user.id);        // Changed from user_id → id (most common pattern)
+
+        if (profileError) {
+          console.warn("Failed to clear must_change_password flag:", profileError);
+        }
       }
 
-      toast({ title: "Password updated successfully" });
+      toast({
+        title: "Password updated successfully",
+        description: "Redirecting to dashboard...",
+      });
+
       navigate("/");
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({
+        title: "Error updating password",
+        description: err.message,
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -70,6 +93,7 @@ export default function ChangePassword() {
             </CardTitle>
             <CardDescription>Choose a strong password for your account</CardDescription>
           </CardHeader>
+
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -83,6 +107,7 @@ export default function ChangePassword() {
                   minLength={8}
                 />
               </div>
+
               <div className="space-y-2">
                 <Label htmlFor="confirm-password">Confirm Password</Label>
                 <PasswordInput
@@ -94,6 +119,7 @@ export default function ChangePassword() {
                   minLength={8}
                 />
               </div>
+
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Update Password

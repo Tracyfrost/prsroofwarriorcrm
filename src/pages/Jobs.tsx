@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { PageWrapper } from "@/components/PageWrapper";
 import { useNavigate } from "react-router-dom";
 import { useJobs, useUpdateJob, type Job } from "@/hooks/useJobs";
@@ -14,30 +14,19 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Search, GripVertical, LayoutGrid, List, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Constants } from "@/integrations/supabase/types";
+import { useJobStatuses, type JobStatus } from "@/hooks/useCustomizations";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { BattleTooltip } from "@/components/BattleTooltip";
 
-const STATUS_LABELS: Record<string, string> = {
-  lead: "Lead",
-  inspected: "Inspected",
-  approved: "Approved",
-  scheduled: "Scheduled",
-  completed: "Completed",
-  closed: "Closed",
-};
+function statusLabel(name: string, defs: JobStatus[]) {
+  return defs.find((d) => d.name === name)?.display_name ?? name;
+}
 
-const STATUS_COLORS: Record<string, string> = {
-  lead: "bg-muted text-muted-foreground",
-  inspected: "bg-accent/20 text-accent-foreground",
-  approved: "bg-success/20 text-success-foreground",
-  scheduled: "bg-primary/20 text-primary-foreground",
-  completed: "bg-success/30 text-success-foreground",
-  closed: "bg-muted text-muted-foreground",
-};
-
-const STATUSES = Constants.public.Enums.job_status;
+function statusAccentStyle(defs: JobStatus[], name: string): CSSProperties | undefined {
+  const c = defs.find((d) => d.name === name)?.color;
+  return c ? { borderLeftWidth: 4, borderLeftStyle: "solid", borderLeftColor: c } : undefined;
+}
 
 export default function Jobs() {
   const isMobile = useIsMobile();
@@ -45,6 +34,8 @@ export default function Jobs() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const { data: jobs = [], isLoading } = useJobs();
+  const { data: jobStatuses = [] } = useJobStatuses(true);
+  const boardColumns = useMemo(() => jobStatuses.filter((s) => s.name !== "closed"), [jobStatuses]);
   const updateJob = useUpdateJob();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -53,7 +44,7 @@ export default function Jobs() {
 
   const handleStatusChange = async (jobId: string, newStatus: string) => {
     try {
-      await updateJob.mutateAsync({ id: jobId, status: newStatus as any });
+      await updateJob.mutateAsync({ id: jobId, status: newStatus });
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
     }
@@ -92,8 +83,8 @@ export default function Jobs() {
             <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
-              {STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>
+              {jobStatuses.map((s) => (
+                <SelectItem key={s.name} value={s.name}>{s.display_name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -120,32 +111,40 @@ export default function Jobs() {
         {isLoading ? (
           <p className="text-center text-muted-foreground py-12">Loading jobs...</p>
         ) : view === "board" ? (
-          <KanbanBoard jobs={filtered} onStatusChange={handleStatusChange} onJobClick={(id) => navigate(`/operations/${id}`)} />
+          <KanbanBoard
+            jobs={filtered}
+            jobStatuses={jobStatuses}
+            boardColumns={boardColumns}
+            onStatusChange={handleStatusChange}
+            onJobClick={(id) => navigate(`/operations/${id}`)}
+          />
         ) : isMobile ? (
-          <JobCardList jobs={filtered} onJobClick={(id) => navigate(`/operations/${id}`)} />
+          <JobCardList jobs={filtered} jobStatuses={jobStatuses} onJobClick={(id) => navigate(`/operations/${id}`)} />
         ) : (
-          <JobTable jobs={filtered} onJobClick={(id) => navigate(`/operations/${id}`)} />
+          <JobTable jobs={filtered} jobStatuses={jobStatuses} onJobClick={(id) => navigate(`/operations/${id}`)} />
         )}
       </PageWrapper>
     </AppLayout>
   );
 }
 
-function KanbanBoard({ jobs, onStatusChange, onJobClick }: {
+function KanbanBoard({ jobs, jobStatuses, boardColumns, onStatusChange, onJobClick }: {
   jobs: Job[];
+  jobStatuses: JobStatus[];
+  boardColumns: JobStatus[];
   onStatusChange: (id: string, status: string) => void;
   onJobClick: (id: string) => void;
 }) {
-  const columns = STATUSES.filter((s) => s !== "closed");
-
   return (
     <div className="flex gap-4 overflow-x-auto pb-4">
-      {columns.map((status) => {
-        const colJobs = jobs.filter((j) => j.status === status);
+      {boardColumns.map((col) => {
+        const colJobs = jobs.filter((j) => j.status === col.name);
         return (
-          <div key={status} className="min-w-[260px] flex-1">
+          <div key={col.name} className="min-w-[260px] flex-1">
             <div className="mb-3 flex items-center gap-2">
-              <Badge className={STATUS_COLORS[status]}>{STATUS_LABELS[status]}</Badge>
+              <Badge variant="outline" className="font-medium" style={statusAccentStyle(jobStatuses, col.name)}>
+                {col.display_name}
+              </Badge>
               <span className="text-xs text-muted-foreground">{colJobs.length}</span>
             </div>
             <div className="space-y-2">
@@ -172,8 +171,8 @@ function KanbanBoard({ jobs, onStatusChange, onJobClick }: {
                           <GripVertical className="h-3 w-3 text-muted-foreground" />
                         </SelectTrigger>
                         <SelectContent>
-                          {STATUSES.map((s) => (
-                            <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>
+                          {jobStatuses.map((s) => (
+                            <SelectItem key={s.name} value={s.name}>{s.display_name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -204,7 +203,7 @@ function KanbanBoard({ jobs, onStatusChange, onJobClick }: {
   );
 }
 
-function JobCardList({ jobs, onJobClick }: { jobs: Job[]; onJobClick: (id: string) => void }) {
+function JobCardList({ jobs, jobStatuses, onJobClick }: { jobs: Job[]; jobStatuses: JobStatus[]; onJobClick: (id: string) => void }) {
   if (jobs.length === 0) {
     return (
       <div className="py-12 text-center text-muted-foreground text-sm">No jobs found</div>
@@ -226,7 +225,9 @@ function JobCardList({ jobs, onJobClick }: { jobs: Job[]; onJobClick: (id: strin
                     {j.job_id}
                     {(j as any).parent_job_id && <Badge variant="secondary" className="ml-1 text-[8px] px-1 py-0">Sub</Badge>}
                   </span>
-                  <Badge className={STATUS_COLORS[j.status]}>{STATUS_LABELS[j.status]}</Badge>
+                  <Badge variant="outline" className="font-medium" style={statusAccentStyle(jobStatuses, j.status)}>
+                    {statusLabel(j.status, jobStatuses)}
+                  </Badge>
                 </div>
                 <p className="font-medium text-foreground mt-1 truncate">{j.customers?.name ?? "Unknown"}</p>
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -245,7 +246,7 @@ function JobCardList({ jobs, onJobClick }: { jobs: Job[]; onJobClick: (id: strin
   );
 }
 
-function JobTable({ jobs, onJobClick }: { jobs: Job[]; onJobClick: (id: string) => void }) {
+function JobTable({ jobs, jobStatuses, onJobClick }: { jobs: Job[]; jobStatuses: JobStatus[]; onJobClick: (id: string) => void }) {
   return (
     <Card className="shadow-card">
       <CardContent className="p-0">
@@ -273,7 +274,11 @@ function JobTable({ jobs, onJobClick }: { jobs: Job[]; onJobClick: (id: string) 
                     {(j as any).parent_job_id && <Badge variant="secondary" className="ml-1 text-[8px] px-1 py-0">Sub</Badge>}
                   </TableCell>
                   <TableCell className="font-medium">{j.customers?.name ?? "—"}</TableCell>
-                  <TableCell><Badge className={STATUS_COLORS[j.status]}>{STATUS_LABELS[j.status]}</Badge></TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="font-medium" style={statusAccentStyle(jobStatuses, j.status)}>
+                      {statusLabel(j.status, jobStatuses)}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{j.trade_types?.join(", ") || "—"}</TableCell>
                   <TableCell className="text-sm">{(j.financials as any)?.acv > 0 ? `$${(j.financials as any).acv.toLocaleString()}` : "—"}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{new Date(j.created_at).toLocaleDateString()}</TableCell>

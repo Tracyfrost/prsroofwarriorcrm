@@ -31,8 +31,18 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { getDocumentUrl } from "@/hooks/useDocuments";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useUpdateAppointment } from "@/hooks/useJobs";
+import { usePermissions } from "@/hooks/usePermissions";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AppointmentOutcomeFields } from "@/components/appointments/AppointmentOutcomeFields";
+import { AppointmentOutcomeSummary } from "@/components/appointments/AppointmentOutcomeSummary";
+import {
+  buildAppointmentOutcomePayload,
+  parseStoredAppointment,
+  type OutcomeRating,
+} from "@/components/appointments/appointmentOutcomeModel";
 
-// Status labels/colors now dynamic from job_statuses table
+// Status labels/colors from flow_stages (job_status flow)
 
 // Lead source labels now come from dynamic data via useLeadSources hook
 
@@ -87,6 +97,9 @@ export default function CustomerDetail() {
   const { data: appointments = [] } = useCustomerAppointments(id);
   const { data: documents = [] } = useCustomerDocuments(id);
   const { data: allProfiles = [] } = useAllProfiles();
+  const updateAppointment = useUpdateAppointment();
+  const { can } = usePermissions();
+  const canEditAppointment = can("edit_appointment");
   const { data: leadSources = [] } = useLeadSources(true);
   const { data: jobStatuses = [] } = useJobStatuses(true);
   const leadSourceLabels: Record<string, string> = Object.fromEntries(leadSources.map(s => [s.name, s.display_name]));
@@ -117,6 +130,39 @@ export default function CustomerDetail() {
   const [priorCrmLocation, setPriorCrmLocation] = useState("");
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState("");
+  const [apptEditing, setApptEditing] = useState<any | null>(null);
+  const [apptDateLocal, setApptDateLocal] = useState("");
+  const [apptRating, setApptRating] = useState<OutcomeRating>("");
+  const [apptDetailNotes, setApptDetailNotes] = useState("");
+
+  const openApptEdit = (a: any) => {
+    setApptEditing(a);
+    setApptDateLocal(format(new Date(a.date_time), "yyyy-MM-dd'T'HH:mm"));
+    const p = parseStoredAppointment(a);
+    setApptRating(p.rating);
+    setApptDetailNotes(p.notes);
+  };
+
+  const closeApptEdit = () => {
+    setApptEditing(null);
+  };
+
+  const saveApptEdit = async () => {
+    if (!apptEditing) return;
+    const { outcome, notes: n } = buildAppointmentOutcomePayload(apptRating, apptDetailNotes);
+    try {
+      await updateAppointment.mutateAsync({
+        id: apptEditing.id,
+        date_time: new Date(apptDateLocal).toISOString(),
+        outcome,
+        notes: n,
+      });
+      toast({ title: "Appointment updated" });
+      closeApptEdit();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+  };
 
   const startEdit = () => {
     if (!customer) return;
@@ -758,19 +804,41 @@ export default function CustomerDetail() {
                       <TableHead>Date & Time</TableHead>
                       <TableHead>Job</TableHead>
                       <TableHead>Outcome</TableHead>
+                      <TableHead className="text-right w-[140px]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {appointments.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No appointments</TableCell>
+                        <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No appointments</TableCell>
                       </TableRow>
                     ) : (
                       appointments.map((a: any) => (
-                        <TableRow key={a.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/operations/${a.job_id}`)}>
+                        <TableRow key={a.id} className="hover:bg-muted/50">
                           <TableCell className="text-sm">{format(new Date(a.date_time), "MMM d, yyyy h:mm a")}</TableCell>
                           <TableCell className="text-sm font-medium">{a.jobs?.job_id || "—"}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">{a.outcome || "—"}</TableCell>
+                          <TableCell className="text-sm">
+                            <AppointmentOutcomeSummary outcome={a.outcome} notes={a.notes} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              {canEditAppointment ? (
+                                <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2" onClick={() => openApptEdit(a)}>
+                                  <Edit2 className="h-3.5 w-3.5" />
+                                  Edit
+                                </Button>
+                              ) : null}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-8"
+                                onClick={() => navigate(`/operations/${a.job_id}`)}
+                              >
+                                View job
+                              </Button>
+                            </div>
+                          </TableCell>
                         </TableRow>
                       ))
                     )}
@@ -778,6 +846,46 @@ export default function CustomerDetail() {
                 </Table>
               </CardContent>
             </Card>
+            <Dialog open={!!apptEditing} onOpenChange={(open) => { if (!open) closeApptEdit(); }}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Edit appointment</DialogTitle>
+                </DialogHeader>
+                {apptEditing ? (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="cust-appt-dt">Date & time</Label>
+                      <Input
+                        id="cust-appt-dt"
+                        type="datetime-local"
+                        value={apptDateLocal}
+                        onChange={(e) => setApptDateLocal(e.target.value)}
+                        disabled={!canEditAppointment}
+                      />
+                    </div>
+                    <AppointmentOutcomeFields
+                      idPrefix="cust-appt"
+                      outcomeRating={apptRating}
+                      notes={apptDetailNotes}
+                      onOutcomeRatingChange={setApptRating}
+                      onNotesChange={setApptDetailNotes}
+                      legacyOutcomeLine={parseStoredAppointment(apptEditing).legacyOutcomeLine}
+                      disabled={!canEditAppointment}
+                    />
+                    <DialogFooter className="gap-2 sm:gap-0">
+                      <Button type="button" variant="outline" onClick={closeApptEdit}>
+                        Cancel
+                      </Button>
+                      {canEditAppointment ? (
+                        <Button type="button" onClick={saveApptEdit} disabled={updateAppointment.isPending}>
+                          {updateAppointment.isPending ? "Saving…" : "Save"}
+                        </Button>
+                      ) : null}
+                    </DialogFooter>
+                  </div>
+                ) : null}
+              </DialogContent>
+            </Dialog>
           </TabsContent>
 
           {/* DOCUMENTS TAB */}

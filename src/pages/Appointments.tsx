@@ -1,9 +1,16 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { PageWrapper } from "@/components/PageWrapper";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useAllAppointments, useUpdateAppointment, useCreateAppointment } from "@/hooks/useJobs";
 import { useJobs } from "@/hooks/useJobs";
+import { usePermissions } from "@/hooks/usePermissions";
+import { AppointmentOutcomeFields } from "@/components/appointments/AppointmentOutcomeFields";
+import {
+  buildAppointmentOutcomePayload,
+  parseStoredAppointment,
+  type OutcomeRating,
+} from "@/components/appointments/appointmentOutcomeModel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,14 +49,40 @@ export default function Appointments() {
   const [addTitle, setAddTitle] = useState("");
   const [addJobId, setAddJobId] = useState("");
   const [addDuration, setAddDuration] = useState("60");
+  const [addOutcomeRating, setAddOutcomeRating] = useState<OutcomeRating>("");
+  const [addNotes, setAddNotes] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [detailRating, setDetailRating] = useState<OutcomeRating>("");
+  const [detailNotes, setDetailNotes] = useState("");
+
+  const { can } = usePermissions();
+  const canEditOutcome = can("edit_appointment");
+  const canAddAppointment = can("add_appointment");
 
   const { data: appointments = [], isLoading } = useAllAppointments();
   const { data: jobs = [] } = useJobs();
   const updateAppointment = useUpdateAppointment();
   const createAppointment = useCreateAppointment();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (searchParams.get("new") !== "1") return;
+    setAddDate(format(new Date(), "yyyy-MM-dd"));
+    setShowAdd(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete("new");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!selectedEvent?.resource) return;
+    const p = parseStoredAppointment(selectedEvent.resource);
+    setDetailRating(p.rating);
+    setDetailNotes(p.notes);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset form when user selects a different calendar event
+  }, [selectedEvent?.id]);
 
   const events: CalendarEvent[] = useMemo(() => {
     return appointments.map((a: any) => {
@@ -124,18 +157,39 @@ export default function Appointments() {
   const handleCreateAppointment = async () => {
     if (!addJobId) return;
     const dateTime = new Date(`${addDate}T${addTime}`);
+    const { outcome, notes } = buildAppointmentOutcomePayload(addOutcomeRating, addNotes);
     try {
       await createAppointment.mutateAsync({
         job_id: addJobId,
         date_time: dateTime.toISOString(),
         title: addTitle,
         duration_minutes: parseInt(addDuration) || 60,
+        outcome: outcome || undefined,
+        notes: notes || undefined,
       });
       toast({ title: "Appointment created" });
       setShowAdd(false);
       setAddTitle("");
       setAddJobId("");
       setAddDuration("60");
+      setAddOutcomeRating("");
+      setAddNotes("");
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleSaveEventOutcome = async () => {
+    if (!selectedEvent) return;
+    const { outcome, notes } = buildAppointmentOutcomePayload(detailRating, detailNotes);
+    try {
+      await updateAppointment.mutateAsync({
+        id: selectedEvent.id,
+        outcome,
+        notes,
+      });
+      toast({ title: "Outcome saved" });
+      setSelectedEvent(null);
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
     }
@@ -162,7 +216,11 @@ export default function Appointments() {
             <h1 className="text-2xl font-display font-bold uppercase tracking-wide text-foreground">Strategic Deployments</h1>
             <p className="text-muted-foreground text-sm">Drag & drop to reposition · Click a slot to deploy forces</p>
           </div>
-          <Button size="sm" onClick={() => { setAddDate(format(new Date(), "yyyy-MM-dd")); setShowAdd(true); }}>
+          <Button
+            size="sm"
+            disabled={!canAddAppointment}
+            onClick={() => { setAddDate(format(new Date(), "yyyy-MM-dd")); setShowAdd(true); }}
+          >
             <Plus className="mr-1 h-3.5 w-3.5" /> Deploy Mission
           </Button>
         </div>
@@ -241,7 +299,18 @@ export default function Appointments() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button onClick={handleCreateAppointment} className="w-full" disabled={!addJobId || !addDate || createAppointment.isPending}>
+              <AppointmentOutcomeFields
+                idPrefix="add-appt"
+                outcomeRating={addOutcomeRating}
+                notes={addNotes}
+                onOutcomeRatingChange={setAddOutcomeRating}
+                onNotesChange={setAddNotes}
+              />
+              <Button
+                onClick={handleCreateAppointment}
+                className="w-full"
+                disabled={!canAddAppointment || !addJobId || !addDate || createAppointment.isPending}
+              >
                 {createAppointment.isPending ? "Creating..." : "Create Appointment"}
               </Button>
             </div>
@@ -249,7 +318,7 @@ export default function Appointments() {
         </Dialog>
 
         {/* Event Detail Dialog */}
-        <Dialog open={!!selectedEvent} onOpenChange={() => setSelectedEvent(null)}>
+        <Dialog open={!!selectedEvent} onOpenChange={(open) => { if (!open) setSelectedEvent(null); }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -276,6 +345,7 @@ export default function Appointments() {
                   <div className="text-sm">
                     <span className="text-muted-foreground">Job:</span>{" "}
                     <button
+                      type="button"
                       className="text-primary hover:underline font-medium"
                       onClick={() => { setSelectedEvent(null); navigate(`/operations/${selectedEvent.resource.job_id}`); }}
                     >
@@ -283,14 +353,34 @@ export default function Appointments() {
                     </button>
                   </div>
                 )}
-                {selectedEvent.resource?.outcome && (
-                  <div className="text-sm">
-                    <span className="text-muted-foreground">Outcome:</span> {selectedEvent.resource.outcome}
-                  </div>
-                )}
-                <Button variant="outline" className="w-full" onClick={() => { setSelectedEvent(null); navigate(`/operations/${selectedEvent.resource.job_id}`); }}>
-                  View Job Details
-                </Button>
+                <AppointmentOutcomeFields
+                  idPrefix="cal-detail"
+                  outcomeRating={detailRating}
+                  notes={detailNotes}
+                  onOutcomeRatingChange={setDetailRating}
+                  onNotesChange={setDetailNotes}
+                  legacyOutcomeLine={parseStoredAppointment(selectedEvent.resource).legacyOutcomeLine}
+                  disabled={!canEditOutcome}
+                />
+                <div className="flex flex-col gap-2">
+                  {canEditOutcome ? (
+                    <Button
+                      className="w-full"
+                      onClick={handleSaveEventOutcome}
+                      disabled={updateAppointment.isPending}
+                    >
+                      {updateAppointment.isPending ? "Saving…" : "Save outcome"}
+                    </Button>
+                  ) : null}
+                  <Button variant="outline" className="w-full" onClick={() => { setSelectedEvent(null); navigate(`/operations/${selectedEvent.resource.job_id}`); }}>
+                    View job (operations)
+                  </Button>
+                  <Button variant="ghost" className="w-full" asChild>
+                    <Link to={`/jobs/${selectedEvent.resource.job_id}`} onClick={() => setSelectedEvent(null)}>
+                      Open job profile
+                    </Link>
+                  </Button>
+                </div>
               </div>
             )}
           </DialogContent>

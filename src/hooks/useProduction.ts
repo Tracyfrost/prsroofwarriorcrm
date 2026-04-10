@@ -15,7 +15,18 @@ export type TradeType = {
 /** Multi-crew line assignment; stored as JSONB on job_production_items.crew_assigned */
 export type CrewAssignment = { user_id: string; role: string };
 
+/** PO / carrier / tracking; stored as JSONB on job_production_items.material_logistics */
+export type MaterialLogistics = {
+  po_number?: string;
+  carrier?: string;
+  tracking_url?: string;
+  tracking_number?: string;
+  notes?: string;
+};
+
 export type ProductionScopeMetadata = {
+  /** Aligns with job qualification `shingle_type`; `shingle_style` kept for older rows */
+  shingle_type?: string;
   shingle_manufacturer?: string;
   shingle_color?: string;
   shingle_style?: string;
@@ -49,6 +60,7 @@ export type ProductionItem = {
   pre_draw_amount: number | null;
   recoverable_depreciation: number | null;
   material_order_status: string;
+  material_logistics: MaterialLogistics | unknown;
   delivery_date: string | null;
   drop_location: string | null;
   crew_assigned: CrewAssignment[] | unknown;
@@ -70,11 +82,17 @@ export function parseScopeMetadata(raw: ProductionItem["scope_metadata"]): Produ
   return {};
 }
 
+export function parseMaterialLogistics(raw: ProductionItem["material_logistics"]): MaterialLogistics {
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) return raw as MaterialLogistics;
+  return {};
+}
+
 function normalizeProductionRow(row: ProductionItem): ProductionItem {
   return {
     ...row,
     qualification_status: row.qualification_status ?? "Pending",
     material_order_status: row.material_order_status ?? "Not Ordered",
+    material_logistics: row.material_logistics ?? {},
     crew_assigned: row.crew_assigned ?? [],
     scope_metadata: row.scope_metadata ?? {},
     drop_location: row.drop_location ?? "",

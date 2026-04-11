@@ -1040,6 +1040,7 @@ export type Database = {
           aggregated_financials: Json | null
           claim_number: string | null
           created_at: string
+          archived_at: string | null
           customer_id: string
           dates: Json
           deleted_at: string | null
@@ -1070,6 +1071,7 @@ export type Database = {
           aggregated_financials?: Json | null
           claim_number?: string | null
           created_at?: string
+          archived_at?: string | null
           customer_id: string
           dates?: Json
           deleted_at?: string | null
@@ -1098,6 +1100,7 @@ export type Database = {
         }
         Update: {
           aggregated_financials?: Json | null
+          archived_at?: string | null
           claim_number?: string | null
           created_at?: string
           customer_id?: string

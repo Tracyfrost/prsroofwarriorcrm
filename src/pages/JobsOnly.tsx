@@ -15,6 +15,7 @@ import { Search, Columns3, RotateCcw } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ResponsiveModal } from "@/components/ui/responsive-modal";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 type ColumnDef = {
   key: string;
@@ -45,6 +46,10 @@ const STATUS_COLORS: Record<string, string> = {
   completed: "bg-success/30 text-success-foreground",
   closed: "bg-muted text-muted-foreground",
 };
+
+function jobIsArchived(j: { archived_at?: string | null }): boolean {
+  return Boolean(j.archived_at);
+}
 
 function loadColumns(): string[] {
   try {
@@ -106,6 +111,11 @@ export default function JobsOnly() {
           <Link to={`/operations/${j.id}`} className="font-mono font-medium text-primary hover:underline text-sm">
             {j.job_id}
             {j.parent_job_id && <Badge variant="secondary" className="ml-1 text-[8px] px-1 py-0">Sub</Badge>}
+            {jobIsArchived(j) && (
+              <Badge variant="outline" className="ml-1 text-[8px] px-1 py-0 border-muted-foreground/50 text-muted-foreground">
+                Archived
+              </Badge>
+            )}
           </Link>
         );
       case "trades":
@@ -192,7 +202,7 @@ export default function JobsOnly() {
                     </TableHeader>
                     <TableBody>
                       {filtered.map(j => (
-                        <TableRow key={j.id} className="hover:bg-muted/40">
+                        <TableRow key={j.id} className={cn("hover:bg-muted/40", jobIsArchived(j) && "opacity-70 bg-muted/25")}>
                           {activeCols.map(col => (
                             <TableCell key={col.key} className={isRightAlign(col.key) ? "text-right" : ""}>
                               {renderCell(j, col.key)}
@@ -217,7 +227,7 @@ export default function JobsOnly() {
             <div className="space-y-2 sm:hidden">
               {filtered.map(j => (
                 <Link key={j.id} to={`/operations/${j.id}`}>
-                  <Card className="shadow-card hover:shadow-card-hover transition-shadow">
+                  <Card className={cn("shadow-card hover:shadow-card-hover transition-shadow", jobIsArchived(j) && "opacity-70 bg-muted/30 border-dashed")}>
                     <CardContent className="p-3">
                       <div className="flex items-start justify-between mb-1">
                         <span className="font-mono text-sm font-medium text-primary">{j.job_id}</span>

@@ -19,6 +19,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { BattleTooltip } from "@/components/BattleTooltip";
 import { jobsListState } from "@/lib/jobNavigation";
+import { cn } from "@/lib/utils";
 
 function statusLabel(name: string, defs: JobStatus[]) {
   return defs.find((d) => d.name === name)?.display_name ?? name;
@@ -37,6 +38,10 @@ function claimSlot(job: Job): string {
 function estimateValue(job: Job): number {
   if ((job as any).job_type === "cash") return Number((job as any).estimate_amount ?? (job.financials as any)?.acv ?? 0);
   return Number((job.financials as any)?.acv ?? 0);
+}
+
+function jobIsArchived(job: Job): boolean {
+  return Boolean((job as any).archived_at);
 }
 
 export default function Jobs() {
@@ -164,7 +169,10 @@ function KanbanBoard({ jobs, jobStatuses, boardColumns, onStatusChange, onJobCli
               {colJobs.map((job) => (
                 <Card
                   key={job.id}
-                  className="cursor-pointer shadow-card hover:shadow-card-hover transition-shadow"
+                  className={cn(
+                    "cursor-pointer shadow-card hover:shadow-card-hover transition-shadow",
+                    jobIsArchived(job) && "opacity-70 bg-muted/30 border-dashed",
+                  )}
                   onClick={() => onJobClick(job.id)}
                 >
                   <CardContent className="p-3">
@@ -173,6 +181,11 @@ function KanbanBoard({ jobs, jobStatuses, boardColumns, onStatusChange, onJobCli
                         <p className="text-xs font-mono text-muted-foreground">
                           {job.job_id}
                           {(job as any).parent_job_id && <Badge variant="secondary" className="ml-1 text-[8px] px-1 py-0">Sub</Badge>}
+                          {jobIsArchived(job) && (
+                            <Badge variant="outline" className="ml-1 text-[8px] px-1 py-0 border-muted-foreground/50 text-muted-foreground">
+                              Archived
+                            </Badge>
+                          )}
                         </p>
                         <p className="text-sm font-medium text-foreground mt-1">{job.customers?.name ?? "Unknown"}</p>
                       </div>
@@ -228,7 +241,10 @@ function JobCardList({ jobs, jobStatuses, onJobClick }: { jobs: Job[]; jobStatus
       {jobs.map((j) => (
         <Card
           key={j.id}
-          className="cursor-pointer shadow-card hover:shadow-card-hover active:scale-[0.99] transition-all min-h-[48px] flex items-center"
+          className={cn(
+            "cursor-pointer shadow-card hover:shadow-card-hover active:scale-[0.99] transition-all min-h-[48px] flex items-center",
+            jobIsArchived(j) && "opacity-70 bg-muted/30 border-dashed",
+          )}
           onClick={() => onJobClick(j.id)}
         >
           <CardContent className="p-4 w-full">
@@ -238,6 +254,11 @@ function JobCardList({ jobs, jobStatuses, onJobClick }: { jobs: Job[]; jobStatus
                   <span className="font-mono text-xs text-muted-foreground">
                     {j.job_id}
                     {(j as any).parent_job_id && <Badge variant="secondary" className="ml-1 text-[8px] px-1 py-0">Sub</Badge>}
+                    {jobIsArchived(j) && (
+                      <Badge variant="outline" className="ml-1 text-[8px] px-1 py-0 border-muted-foreground/50 text-muted-foreground">
+                        Archived
+                      </Badge>
+                    )}
                   </span>
                   <Badge variant="outline" className="font-medium" style={statusAccentStyle(jobStatuses, j.status)}>
                     {statusLabel(j.status, jobStatuses)}
@@ -284,10 +305,19 @@ function JobTable({ jobs, jobStatuses, onJobClick }: { jobs: Job[]; jobStatuses:
               </TableRow>
             ) : (
               jobs.map((j) => (
-                <TableRow key={j.id} className="cursor-pointer hover:bg-muted/50" onClick={() => onJobClick(j.id)}>
+                <TableRow
+                  key={j.id}
+                  className={cn("cursor-pointer hover:bg-muted/50", jobIsArchived(j) && "opacity-70 bg-muted/25")}
+                  onClick={() => onJobClick(j.id)}
+                >
                   <TableCell className="font-mono text-sm">
                     {j.job_id}
                     {(j as any).parent_job_id && <Badge variant="secondary" className="ml-1 text-[8px] px-1 py-0">Sub</Badge>}
+                    {jobIsArchived(j) && (
+                      <Badge variant="outline" className="ml-1 text-[8px] px-1 py-0 border-muted-foreground/50 text-muted-foreground">
+                        Archived
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell className="font-medium">{j.customers?.name ?? "—"}</TableCell>
                   <TableCell>

@@ -36,6 +36,7 @@ import {
   useDeleteJobAssignment,
   useJob,
   useJobAssignments,
+  useSetJobArchived,
   useSoftDeleteJob,
   useSubJobs,
   useUpdateJob,
@@ -44,7 +45,8 @@ import { useAllProfiles } from "@/hooks/useHierarchy";
 import { useTradeTypes } from "@/hooks/useProduction";
 import { useStatusBranches } from "@/hooks/useStatusBranches";
 import { useJobStatuses } from "@/hooks/useCustomizations";
-import { useUserRoles } from "@/hooks/useProfile";
+import { usePermissions } from "@/hooks/usePermissions";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { formatSupabaseErr } from "@/hooks/useDocuments";
 import type { Qualification } from "@/hooks/useJobProduction";
@@ -61,6 +63,8 @@ import {
   Upload,
   Users,
   X,
+  Archive,
+  ArchiveRestore,
 } from "lucide-react";
 import { resolveJobsBackPath, type JobNavigationState } from "@/lib/jobNavigation";
 
@@ -101,9 +105,10 @@ export default function Operations() {
   const createAssignment = useCreateJobAssignment();
   const deleteAssignment = useDeleteJobAssignment();
   const softDeleteJob = useSoftDeleteJob();
-  const { data: myRoles = [] } = useUserRoles();
-
-  const canDelete = myRoles.some((r) => ["owner", "manager", "office_admin"].includes(r));
+  const setJobArchived = useSetJobArchived();
+  const { can } = usePermissions();
+  const canDeleteJob = can("delete_job");
+  const canEditJob = can("edit_job");
   const [activeTab, setActiveTab] = useState("overview");
   const [assignUserId, setAssignUserId] = useState("");
   const [assignRole, setAssignRole] = useState("primary_rep");
@@ -143,6 +148,7 @@ export default function Operations() {
   }
 
   const customer = (job.customers ?? {}) as any;
+  const isArchived = Boolean((job as any).archived_at);
   const financials = (job.financials ?? {}) as any;
   const jobType = ((job as any).job_type ?? "insurance") as "insurance" | "cash";
   const estimateAmount = Number((job as any).estimate_amount ?? financials?.acv ?? 0);
@@ -236,9 +242,18 @@ export default function Operations() {
 
   return (
     <AppLayout>
-      <div className="min-h-screen bg-background pb-10">
+      <div className={`min-h-screen bg-background pb-10 ${isArchived ? "opacity-95" : ""}`}>
         <div className="sticky top-0 z-40 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
           <div className="mx-auto max-w-7xl px-4 py-3 sm:py-4">
+            {isArchived && (
+              <div className="mb-3 flex items-start gap-2 rounded-md border border-border bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground">
+                <Archive className="h-4 w-4 shrink-0 mt-0.5 text-foreground/70" />
+                <div>
+                  <Badge variant="secondary" className="mb-1 text-[10px] uppercase tracking-wide">Archived</Badge>
+                  <p>This job is archived. It remains visible with muted styling; use Unarchive to return it to active work.</p>
+                </div>
+              </div>
+            )}
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="space-y-1">
                 <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => navigate(backToJobsPath)}>
@@ -268,7 +283,7 @@ export default function Operations() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 <Button variant="outline" className="min-h-[44px]" onClick={() => setEditJobOpen(true)}>
                   <Pencil className="mr-2 h-4 w-4" />
                   Edit Job
@@ -294,7 +309,58 @@ export default function Operations() {
                     </Button>
                   }
                 />
-                {canDelete && (
+                {canEditJob && !isArchived && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" className="min-h-[44px]">
+                        <Archive className="mr-2 h-4 w-4" />
+                        Archive
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Archive {job.job_id}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This marks the job as archived{isMainJob && subJobsList.length > 0 ? ` (and its ${subJobsList.length} sub-job(s))` : ""}. It stays visible with muted styling and is excluded from aggregate reports.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={async () => {
+                            try {
+                              await setJobArchived.mutateAsync({ jobId: job.id, archived: true });
+                              toast({ title: "Job archived" });
+                            } catch (error: any) {
+                              toast({ title: "Error", description: error.message, variant: "destructive" });
+                            }
+                          }}
+                        >
+                          Archive
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+                {canEditJob && isArchived && (
+                  <Button
+                    variant="outline"
+                    className="min-h-[44px]"
+                    disabled={setJobArchived.isPending}
+                    onClick={async () => {
+                      try {
+                        await setJobArchived.mutateAsync({ jobId: job.id, archived: false });
+                        toast({ title: "Job unarchived" });
+                      } catch (error: any) {
+                        toast({ title: "Error", description: error.message, variant: "destructive" });
+                      }
+                    }}
+                  >
+                    <ArchiveRestore className="mr-2 h-4 w-4" />
+                    Unarchive
+                  </Button>
+                )}
+                {canDeleteJob ? (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button variant="destructive" className="min-h-[44px]">
@@ -328,6 +394,20 @@ export default function Operations() {
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex min-h-[44px] items-stretch">
+                        <Button variant="destructive" className="min-h-[44px] flex-1 pointer-events-none opacity-50" disabled>
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-xs">
+                      Only owners and executive admins can delete jobs. Archive the job instead if you need to set it aside from active work.
+                    </TooltipContent>
+                  </Tooltip>
                 )}
               </div>
             </div>

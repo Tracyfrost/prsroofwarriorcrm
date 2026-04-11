@@ -14,6 +14,7 @@ export type JobForReport = {
   financials: { rcv?: number; acv?: number } | null;
   created_at: string;
   deleted_at: string | null;
+  archived_at?: string | null;
 };
 
 export type AssignmentForReport = { job_id: string; user_id: string; assignment_role: string };
@@ -44,7 +45,7 @@ function aggregateBySalesRep(
   const repMap = new Map<string, { squares: number; rcv: number; acv: number; count: number }>();
 
   for (const job of jobs) {
-    if (job.deleted_at) continue;
+    if (job.deleted_at || job.archived_at) continue;
     const assignments = assignmentsByJob.get(job.id) ?? [];
     const mainJob = job.parent_job_id ? mainJobById.get(job.parent_job_id) : null;
     const mainAssignments = mainJob ? assignmentsByJob.get(mainJob.id) ?? [] : [];
@@ -85,7 +86,7 @@ function aggregateSquaresSummary(jobs: JobForReport[]): SquaresSummary {
   let total_actual_installed = 0;
   let total_final = 0;
   for (const j of jobs) {
-    if (j.deleted_at) continue;
+    if (j.deleted_at || j.archived_at) continue;
     total_estimated += Number(j.squares_estimated ?? 0);
     total_actual_installed += Number(j.squares_actual_installed ?? j.number_of_squares ?? 0);
     total_final += Number(j.squares_final ?? j.squares_actual_installed ?? j.number_of_squares ?? 0);
@@ -106,9 +107,10 @@ export function useReportJobs() {
       const { data, error } = await supabase
         .from("jobs")
         .select(
-          "id, parent_job_id, sales_rep_id, status, squares_estimated, squares_actual_installed, squares_final, number_of_squares, financials, created_at, deleted_at"
+          "id, parent_job_id, sales_rep_id, status, squares_estimated, squares_actual_installed, squares_final, number_of_squares, financials, created_at, deleted_at, archived_at"
         )
-        .is("deleted_at", null);
+        .is("deleted_at", null)
+        .is("archived_at", null);
       if (error) throw error;
       return (data ?? []) as JobForReport[];
     },
@@ -210,7 +212,7 @@ export function runCustomReport(
   const dateTo = config.date_to ? new Date(config.date_to).getTime() : null;
   const statusSet = config.statuses?.length ? new Set(config.statuses) : null;
 
-  let filtered = jobs.filter((j) => !j.deleted_at);
+  let filtered = jobs.filter((j) => !j.deleted_at && !j.archived_at);
   if (dateFrom != null) filtered = filtered.filter((j) => new Date(j.created_at).getTime() >= dateFrom);
   if (dateTo != null) filtered = filtered.filter((j) => new Date(j.created_at).getTime() <= dateTo);
   if (statusSet != null) filtered = filtered.filter((j) => j.status && statusSet.has(j.status));

@@ -235,11 +235,38 @@ export function useSoftDeleteJob() {
       if (subErr) throw subErr;
       return jobId;
     },
-    onSuccess: () => {
+    onSuccess: (jobId) => {
       qc.invalidateQueries({ queryKey: ["jobs"] });
       qc.invalidateQueries({ queryKey: ["main-jobs"] });
       qc.invalidateQueries({ queryKey: ["sub-jobs"] });
       qc.invalidateQueries({ queryKey: ["job-count"] });
+      qc.invalidateQueries({ queryKey: ["job", jobId] });
+      qc.invalidateQueries({ queryKey: ["customer-jobs"] });
+      qc.invalidateQueries({ queryKey: ["report-jobs-full"] });
+    },
+  });
+}
+
+/** Sets archived_at on this job and all sub-jobs when this row is a main job. */
+export function useSetJobArchived() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ jobId, archived }: { jobId: string; archived: boolean }) => {
+      const archived_at = archived ? new Date().toISOString() : null;
+      const { error: mainErr } = await supabase.from("jobs").update({ archived_at }).eq("id", jobId);
+      if (mainErr) throw mainErr;
+      const { error: subErr } = await supabase.from("jobs").update({ archived_at }).eq("parent_job_id", jobId);
+      if (subErr) throw subErr;
+      return { jobId };
+    },
+    onSuccess: ({ jobId }) => {
+      qc.invalidateQueries({ queryKey: ["jobs"] });
+      qc.invalidateQueries({ queryKey: ["main-jobs"] });
+      qc.invalidateQueries({ queryKey: ["job", jobId] });
+      qc.invalidateQueries({ queryKey: ["sub-jobs"] });
+      qc.invalidateQueries({ queryKey: ["job-count"] });
+      qc.invalidateQueries({ queryKey: ["customer-jobs"] });
+      qc.invalidateQueries({ queryKey: ["report-jobs-full"] });
     },
   });
 }

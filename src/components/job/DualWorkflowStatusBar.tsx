@@ -1,9 +1,59 @@
+import { useEffect, useRef } from "react";
 import { Check, GitBranch } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import type { JobStatus } from "@/hooks/useCustomizations";
 import type { StatusBranch } from "@/hooks/useStatusBranches";
+
+const DEFAULT_MAIN_FLOW_NAMES = ["lead", "inspected", "approved", "scheduled", "completed", "closed"];
+
+/** When the DB main branch lists fewer than 2 statuses, expand so the job-flow strip still works. */
+function resolveEffectiveMainStatuses(
+  mainStatuses: JobStatus[],
+  allStatuses: JobStatus[],
+  currentStatusName: string,
+): JobStatus[] {
+  if (mainStatuses.length >= 2) {
+    return mainStatuses;
+  }
+
+  const defaults = allStatuses
+    .filter((s) => DEFAULT_MAIN_FLOW_NAMES.includes(s.name))
+    .sort((a, b) => DEFAULT_MAIN_FLOW_NAMES.indexOf(a.name) - DEFAULT_MAIN_FLOW_NAMES.indexOf(b.name));
+
+  const current = allStatuses.find((s) => s.name === currentStatusName);
+  const merged: JobStatus[] = [];
+  const seen = new Set<string>();
+  for (const s of defaults) {
+    if (!seen.has(s.id)) {
+      seen.add(s.id);
+      merged.push(s);
+    }
+  }
+  if (current && !seen.has(current.id)) {
+    merged.push(current);
+    seen.add(current.id);
+  }
+  for (const s of mainStatuses) {
+    if (!seen.has(s.id)) {
+      seen.add(s.id);
+      merged.push(s);
+    }
+  }
+
+  if (merged.length >= 2) {
+    return merged.sort((a, b) => {
+      const ia = DEFAULT_MAIN_FLOW_NAMES.indexOf(a.name);
+      const ib = DEFAULT_MAIN_FLOW_NAMES.indexOf(b.name);
+      const va = ia >= 0 ? ia : 1000;
+      const vb = ib >= 0 ? ib : 1000;
+      return va - vb;
+    });
+  }
+
+  return mainStatuses.length > 0 ? mainStatuses : merged;
+}
 
 interface DualWorkflowStatusBarProps {
   allStatuses: JobStatus[];
@@ -16,60 +66,90 @@ interface DualWorkflowStatusBarProps {
   onToggleSupplement: (enabled: boolean) => void;
 }
 
-function StatusNode({
+function JobFlowLabelHeading({ label, progressPct }: { label: string; progressPct: number }) {
+  const parts = label.split(" — ");
+  const hasSub = parts.length === 2;
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+      {hasSub ? (
+        <>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{parts[0]}</span>
+          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/80">— {parts[1]}</span>
+        </>
+      ) : (
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+      )}
+      <span className="text-[10px] text-muted-foreground">({progressPct}%)</span>
+    </div>
+  );
+}
+
+function JobFlowStatusCard({
   status,
-  isActive,
-  isPast,
-  isFuture,
-  onClick,
-  progress,
+  idx,
+  activeIndex,
+  accentColor,
+  flowPercent,
+  showPercent,
+  onSelect,
 }: {
   status: JobStatus;
-  isActive: boolean;
-  isPast: boolean;
-  isFuture: boolean;
-  onClick: () => void;
-  progress?: string;
+  idx: number;
+  activeIndex: number;
+  accentColor: string;
+  flowPercent: number;
+  showPercent: boolean;
+  onSelect: () => void;
 }) {
+  const isActive = idx === activeIndex;
+  const isPast = idx < activeIndex;
+  const stateLabel = isActive ? "Current" : isPast ? "Completed" : "Upcoming";
+  const barColor = status.color || accentColor;
+
   return (
-    <TooltipProvider delayDuration={200}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            onClick={onClick}
-            className="group relative flex flex-col items-center flex-1 min-w-[80px]"
-            title={`Change to ${status.display_name}`}
-          >
-            <div
-              className={`relative z-10 flex items-center justify-center rounded-full border-2 transition-all cursor-pointer
-                ${isActive ? "h-9 w-9 shadow-lg ring-4 ring-blue-200 dark:ring-blue-900/50" : isPast ? "h-7 w-7" : "h-7 w-7 opacity-40"}
-              `}
-              style={{
-                borderColor: isActive ? "#3b82f6" : isPast ? (status.color || "#6b7280") : "#d1d5db",
-                backgroundColor: isPast ? (status.color || "#6b7280") : isActive ? "#3b82f6" : "transparent",
-              }}
-            >
-              {isPast && <Check className="h-3.5 w-3.5 text-white" />}
-              {isActive && <div className="h-3 w-3 rounded-full bg-white" />}
-            </div>
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        "flex h-[104px] w-[160px] min-w-[150px] max-w-[180px] shrink-0 flex-col rounded-lg border border-border/80 p-3 text-center shadow-sm transition-all",
+        "border-t-[5px] hover:brightness-[1.02] dark:hover:brightness-110",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        isActive && "shadow-md",
+        !isActive && "opacity-90",
+      )}
+      style={{
+        borderTopColor: barColor,
+        backgroundColor: `color-mix(in srgb, ${barColor} 12%, hsl(var(--card)))`,
+        ...(isActive
+          ? {
+              boxShadow: `0 0 0 2px color-mix(in srgb, ${accentColor} 45%, transparent), 0 4px 6px -1px rgb(0 0 0 / 0.08)`,
+            }
+          : {}),
+      }}
+      aria-current={isActive ? "step" : undefined}
+      aria-label={`${status.display_name}, ${stateLabel}. Click to set job status.`}
+    >
+      <span className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{status.display_name}</span>
+      <div className="mt-auto flex flex-col items-center gap-1 pt-2 text-xs text-muted-foreground">
+        <div className="flex items-center justify-center gap-1.5">
+          {isPast && <Check className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />}
+          {isActive && (
             <span
-              className={`mt-1.5 text-[10px] font-medium leading-tight text-center whitespace-nowrap
-                ${isActive ? "text-blue-600 dark:text-blue-400 font-bold" : isPast ? "text-muted-foreground" : "text-muted-foreground/40"}
-              `}
-            >
-              {status.display_name}
-            </span>
-            {progress && isActive && (
-              <span className="text-[9px] text-blue-500 font-semibold mt-0.5">{progress}</span>
-            )}
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom" className="text-xs">
-          <p className="font-semibold">{status.display_name}</p>
-          <p className="text-muted-foreground">Click to set status</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+              className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+              style={{ backgroundColor: accentColor }}
+              aria-hidden
+            />
+          )}
+          <span className={cn(isActive && "font-medium text-foreground")}>{stateLabel}</span>
+        </div>
+        {isActive && showPercent && (
+          <span className="tabular-nums font-medium opacity-90" style={{ color: accentColor }}>
+            {flowPercent}%
+          </span>
+        )}
+      </div>
+    </button>
   );
 }
 
@@ -86,52 +166,70 @@ function StatusBar({
   label?: string;
   accentColor?: string;
 }) {
-  const currentIdx = statuses.findIndex((s) => s.name === currentStatus);
-  const progressPct = statuses.length > 1 ? Math.round(((Math.max(currentIdx, 0)) / (statuses.length - 1)) * 100) : 0;
+  const rawIdx = statuses.findIndex((s) => s.name === currentStatus);
+  const resolvedIdx = rawIdx >= 0 ? rawIdx : 0;
+
+  const itemRefs = useRef<(HTMLLIElement | null)[]>([]);
+  const statusIds = statuses.map((s) => s.id).join(",");
+
+  const progressPct =
+    statuses.length > 1 ? Math.round((Math.max(resolvedIdx, 0) / (statuses.length - 1)) * 100) : 0;
+
+  useEffect(() => {
+    const el = itemRefs.current[resolvedIdx];
+    el?.scrollIntoView({ inline: "nearest", block: "nearest", behavior: "auto" });
+  }, [resolvedIdx, statusIds]);
+
+  if (statuses.length === 0) {
+    return null;
+  }
+
+  const regionLabel = label
+    ? `${label} status steps. Scroll sideways to see all steps. Click a card to set status.`
+    : "Job status steps. Scroll sideways to see all steps. Click a card to set status.";
 
   return (
     <div className="relative">
       {label && (
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
-          <span className="text-[10px] text-muted-foreground">({progressPct}%)</span>
+        <div className="mb-2 space-y-0.5">
+          <JobFlowLabelHeading label={label} progressPct={progressPct} />
+          {statuses.length > 1 && (
+            <p className="text-[10px] text-muted-foreground">
+              Scroll sideways to see all steps. Click a card to set status.
+            </p>
+          )}
         </div>
       )}
-      <div className="relative flex items-center">
-        {/* Background track */}
-        <div className="absolute top-[14px] left-[40px] right-[40px] h-0.5 bg-border rounded-full" />
-        {/* Filled track */}
-        {currentIdx >= 0 && (
-          <div
-            className="absolute top-[14px] left-[40px] h-0.5 rounded-full transition-all duration-500"
-            style={{
-              width: statuses.length > 1
-                ? `calc(${(currentIdx / (statuses.length - 1)) * 100}% * (1 - 80px / 100%))`
-                : "0%",
-              background: `linear-gradient(90deg, ${accentColor}, ${accentColor}dd)`,
-              maxWidth: `calc(100% - 80px)`,
-            }}
-          />
-        )}
-        {/* Nodes */}
-        <div className="relative flex items-center w-full justify-between">
-          {statuses.map((status, idx) => {
-            const isActive = status.name === currentStatus;
-            const isPast = idx < currentIdx;
-            const isFuture = idx > currentIdx;
-            return (
-              <StatusNode
-                key={status.id}
+
+      <div className="job-flow-strip-wrap rounded-md">
+        <ul
+          className="job-flow-hscroll flex list-none flex-row gap-2 overflow-x-auto overscroll-x-contain scroll-smooth pb-1"
+          role="list"
+          aria-label={regionLabel}
+        >
+          {statuses.map((status, idx) => (
+            <li
+              key={status.id}
+              ref={(el) => {
+                itemRefs.current[idx] = el;
+              }}
+              className="shrink-0"
+              role="listitem"
+            >
+              <JobFlowStatusCard
                 status={status}
-                isActive={isActive}
-                isPast={isPast}
-                isFuture={isFuture}
-                onClick={() => onStatusChange(status.name)}
-                progress={isActive ? `${progressPct}%` : undefined}
+                idx={idx}
+                activeIndex={resolvedIdx}
+                accentColor={accentColor}
+                showPercent={statuses.length > 1}
+                flowPercent={
+                  statuses.length > 1 ? Math.round((idx / (statuses.length - 1)) * 100) : 0
+                }
+                onSelect={() => onStatusChange(status.name)}
               />
-            );
-          })}
-        </div>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );
@@ -150,7 +248,6 @@ export function DualWorkflowStatusBar({
   const mainBranch = branches.find((b) => b.name === "main");
   const supplementBranch = branches.find((b) => b.name === "supplement");
 
-  // Resolve statuses for each branch from their UUID arrays
   const resolveStatuses = (branch: StatusBranch | undefined): JobStatus[] => {
     if (!branch || !branch.statuses?.length) return [];
     return branch.statuses
@@ -161,68 +258,59 @@ export function DualWorkflowStatusBar({
   const mainStatuses = resolveStatuses(mainBranch);
   const supplementStatuses = resolveStatuses(supplementBranch);
 
-  // Fallback: if branches have no statuses configured, use all active statuses for main
-  const effectiveMainStatuses = mainStatuses.length > 0 ? mainStatuses : allStatuses.filter(s => 
-    ["lead", "inspected", "approved", "scheduled", "completed", "closed"].includes(s.name)
-  );
+  const effectiveMainStatuses =
+    mainStatuses.length >= 2
+      ? mainStatuses
+      : resolveEffectiveMainStatuses(mainStatuses, allStatuses, mainStatus);
 
-  // Find the branch point index in the main bar
   const branchPointStatus = supplementBranch?.branch_point_status || "inspected";
   const branchPointIdx = effectiveMainStatuses.findIndex((s) => s.name === branchPointStatus);
 
   return (
     <div className="space-y-2">
-      {/* Supplement Branch (shown above main when enabled) */}
       {hasSupplement && supplementStatuses.length > 0 && (
         <div className="relative">
-          {/* Connecting line from branch point */}
           <div className="relative pl-4 pr-4">
-            <div className="rounded-lg border border-dashed border-blue-300 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-950/20 p-3">
+            <div className="rounded-lg border border-dashed border-blue-300 bg-blue-50/50 p-3 dark:border-blue-700 dark:bg-blue-950/20">
               <StatusBar
                 statuses={supplementStatuses}
                 currentStatus={supplementStatus || supplementStatuses[0]?.name || ""}
                 onStatusChange={onSupplementStatusChange}
-                label="Supplement Flow"
+                label="Job Flow — Supplement"
                 accentColor="#0ea5e9"
               />
             </div>
           </div>
-          {/* Vertical connector */}
           <div className="flex justify-start pl-4">
             <div
               className="relative"
               style={{
-                marginLeft: branchPointIdx >= 0 && effectiveMainStatuses.length > 1
-                  ? `calc(${(branchPointIdx / (effectiveMainStatuses.length - 1)) * 100}% - 1px)`
-                  : "120px",
+                marginLeft:
+                  branchPointIdx >= 0 && effectiveMainStatuses.length > 1
+                    ? `calc(${(branchPointIdx / (effectiveMainStatuses.length - 1)) * 100}% - 1px)`
+                    : "120px",
               }}
             >
-              <div className="w-0.5 h-4 bg-gradient-to-b from-blue-400 to-blue-500 mx-auto" />
-              <GitBranch className="h-3.5 w-3.5 text-blue-500 mx-auto -mt-0.5" />
+              <div className="mx-auto h-4 w-0.5 bg-gradient-to-b from-blue-400 to-blue-500" />
+              <GitBranch className="mx-auto -mt-0.5 h-3.5 w-3.5 text-blue-500" />
             </div>
           </div>
         </div>
       )}
 
-      {/* Main Status Bar */}
       <div className="rounded-lg border bg-card p-3">
         <StatusBar
           statuses={effectiveMainStatuses}
           currentStatus={mainStatus}
           onStatusChange={onMainStatusChange}
-          label="Main Flow"
+          label="Job Flow"
           accentColor="#3b82f6"
         />
       </div>
 
-      {/* Toggle */}
       <div className="flex items-center gap-2 pt-1">
-        <Switch
-          id="supplement-toggle"
-          checked={hasSupplement}
-          onCheckedChange={onToggleSupplement}
-        />
-        <Label htmlFor="supplement-toggle" className="text-xs text-muted-foreground cursor-pointer">
+        <Switch id="supplement-toggle" checked={hasSupplement} onCheckedChange={onToggleSupplement} />
+        <Label htmlFor="supplement-toggle" className="cursor-pointer text-xs text-muted-foreground">
           Enable Supplement Flow
         </Label>
       </div>

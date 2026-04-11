@@ -146,4 +146,34 @@
   .production-board-hscroll::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground) / 0.65);
   }
+
+  /**
+   * Job flow status strip (Leap-style): horizontal scrollbar hidden until the
+   * wrapper is hovered. Apply .job-flow-hscroll on the scrolling flex row
+   * inside .job-flow-strip-wrap.
+   */
+  .job-flow-strip-wrap .job-flow-hscroll {
+    scrollbar-width: none;
+  }
+  .job-flow-strip-wrap .job-flow-hscroll::-webkit-scrollbar {
+    height: 0;
+  }
+  .job-flow-strip-wrap:hover .job-flow-hscroll {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.5) hsl(var(--muted) / 0.4);
+  }
+  .job-flow-strip-wrap:hover .job-flow-hscroll::-webkit-scrollbar {
+    height: 10px;
+  }
+  .job-flow-strip-wrap:hover .job-flow-hscroll::-webkit-scrollbar-track {
+    background: hsl(var(--muted) / 0.35);
+    border-radius: 9999px;
+  }
+  .job-flow-strip-wrap:hover .job-flow-hscroll::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.45);
+    border-radius: 9999px;
+  }
+  .job-flow-strip-wrap:hover .job-flow-hscroll::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.65);
+  }
 }

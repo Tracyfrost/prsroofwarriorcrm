@@ -45,7 +45,7 @@ const DEFAULT_PHRASES: Record<string, string> = {
   back_to_main_job: "Return to parent main job",
   forge_trades: "Edit trade types for this job",
   add_sub_job_btn: "Create a sub job under this main job",
-  delete_job: "Soft-delete this job (removes from listings)",
+  delete_job: "Permanently remove this job from listings (owners and executive admins only)",
   main_job_chip: "View main job",
   sub_job_chip: "Switch to this sub job",
   view_job: "Open this job",

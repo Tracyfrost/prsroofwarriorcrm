@@ -2,7 +2,8 @@ import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
-import { useJob, useUpdateJob, useAppointments, useJobAssignments, useCreateJobAssignment, useDeleteJobAssignment, useSubJobs, useSoftDeleteJob } from "@/hooks/useJobs";
+import { useJob, useUpdateJob, useAppointments, useJobAssignments, useCreateJobAssignment, useDeleteJobAssignment, useSubJobs, useSoftDeleteJob, useSetJobArchived } from "@/hooks/useJobs";
+import { usePermissions } from "@/hooks/usePermissions";
 import { CreateJobModal } from "@/components/jobs/CreateJobModal";
 import { useCreateCommission } from "@/hooks/useCommissions";
 import { useAllProfiles } from "@/hooks/useHierarchy";
@@ -19,7 +20,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, DollarSign, MapPin, Phone, Mail, Save, Plus, Brain, Loader2, Hammer, Users, X, Trash2, ChevronDown, ChevronUp, Camera } from "lucide-react";
+import { ArrowLeft, DollarSign, MapPin, Phone, Mail, Save, Plus, Brain, Loader2, Hammer, Users, X, Trash2, ChevronDown, ChevronUp, Camera, Archive, ArchiveRestore } from "lucide-react";
 import { AddressLink } from "@/components/AddressLink";
 import { BattleTooltip } from "@/components/BattleTooltip";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -27,7 +28,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { ResponsiveModal } from "@/components/ui/responsive-modal";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { useUserRoles } from "@/hooks/useProfile";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { JobAppointmentsBlock } from "@/components/appointments/JobAppointmentsBlock";
 import { ProductionSection } from "@/components/production/ProductionSection";
 import { DualWorkflowStatusBar } from "@/components/job/DualWorkflowStatusBar";
@@ -69,9 +70,11 @@ export default function JobDetail() {
   const createCommission = useCreateCommission();
   const { user } = useAuth();
   const { toast } = useToast();
-  const { data: myRoles = [] } = useUserRoles();
+  const { can } = usePermissions();
   const softDeleteJob = useSoftDeleteJob();
-  const canDelete = myRoles.some((r) => ["owner"].includes(r)) || myRoles.some((r) => ["manager", "office_admin"].includes(r));
+  const setJobArchived = useSetJobArchived();
+  const canDeleteJob = can("delete_job");
+  const canEditJob = can("edit_job");
 
   usePageTitle(job ? `Job ${job.job_id}` : "Jobs");
 
@@ -306,11 +309,22 @@ export default function JobDetail() {
 
   const parentJobId = (job as any).parent_job_id;
 
+  const isArchived = Boolean((job as any).archived_at);
+
   return (
     <AppLayout>
-      <div className="animate-fade-in">
+      <div className={`animate-fade-in ${isArchived ? "opacity-95" : ""}`}>
         {/* Back + Header */}
         <div className="mb-6">
+          {isArchived && (
+            <div className="mb-3 flex items-start gap-2 rounded-md border border-border bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground">
+              <Archive className="h-4 w-4 shrink-0 mt-0.5 text-foreground/70" />
+              <div>
+                <Badge variant="secondary" className="mb-1 text-[10px] uppercase tracking-wide">Archived</Badge>
+                <p>This job is archived. It remains in the system with muted styling; use Unarchive to return it to active work.</p>
+              </div>
+            </div>
+          )}
           <BattleTooltip phraseKey="back_to_jobs">
             <Button variant="ghost" size="sm" onClick={() => navigate(backToJobsPath)} className="mb-3">
               <ArrowLeft className="mr-2 h-4 w-4" /> Back to Jobs
@@ -471,7 +485,56 @@ export default function JobDetail() {
                    }
                  />
                )}
-               {canDelete && (
+               {canEditJob && !isArchived && (
+                 <AlertDialog>
+                   <AlertDialogTrigger asChild>
+                     <Button variant="outline" size="sm">
+                       <Archive className="mr-1 h-3 w-3" /> Archive
+                     </Button>
+                   </AlertDialogTrigger>
+                   <AlertDialogContent>
+                     <AlertDialogHeader>
+                       <AlertDialogTitle>Archive {job.job_id}?</AlertDialogTitle>
+                       <AlertDialogDescription>
+                         This marks the job as archived{isMainJob && subJobsList.length > 0 ? ` (and its ${subJobsList.length} sub-job(s))` : ""}. It stays visible with muted styling and is excluded from aggregate reports. Owners and admins can still permanently delete if needed.
+                       </AlertDialogDescription>
+                     </AlertDialogHeader>
+                     <AlertDialogFooter>
+                       <AlertDialogCancel>Cancel</AlertDialogCancel>
+                       <AlertDialogAction
+                         onClick={async () => {
+                           try {
+                             await setJobArchived.mutateAsync({ jobId: job.id, archived: true });
+                             toast({ title: "Job archived" });
+                           } catch (e: any) {
+                             toast({ title: "Error", description: e.message, variant: "destructive" });
+                           }
+                         }}
+                       >
+                         Archive
+                       </AlertDialogAction>
+                     </AlertDialogFooter>
+                   </AlertDialogContent>
+                 </AlertDialog>
+               )}
+               {canEditJob && isArchived && (
+                 <Button
+                   variant="outline"
+                   size="sm"
+                   disabled={setJobArchived.isPending}
+                   onClick={async () => {
+                     try {
+                       await setJobArchived.mutateAsync({ jobId: job.id, archived: false });
+                       toast({ title: "Job unarchived" });
+                     } catch (e: any) {
+                       toast({ title: "Error", description: e.message, variant: "destructive" });
+                     }
+                   }}
+                 >
+                   <ArchiveRestore className="mr-1 h-3 w-3" /> Unarchive
+                 </Button>
+               )}
+               {canDeleteJob ? (
                  <AlertDialog>
                    <AlertDialogTrigger asChild>
                      <BattleTooltip phraseKey="delete_job">
@@ -504,6 +567,19 @@ export default function JobDetail() {
                      </AlertDialogFooter>
                    </AlertDialogContent>
                  </AlertDialog>
+               ) : (
+                 <Tooltip>
+                   <TooltipTrigger asChild>
+                     <span className="inline-flex">
+                       <Button variant="destructive" size="sm" disabled className="pointer-events-none opacity-50">
+                         <Trash2 className="mr-1 h-3 w-3" /> Delete
+                       </Button>
+                     </span>
+                   </TooltipTrigger>
+                   <TooltipContent side="bottom" className="max-w-xs">
+                     Only owners and executive admins can delete jobs. Archive the job instead if you need to set it aside from active work.
+                   </TooltipContent>
+                 </Tooltip>
                )}
              </div>
            </div>

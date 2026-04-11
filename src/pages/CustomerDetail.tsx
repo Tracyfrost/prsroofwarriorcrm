@@ -31,6 +31,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { getDocumentUrl } from "@/hooks/useDocuments";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { cn } from "@/lib/utils";
 import { useUpdateAppointment } from "@/hooks/useJobs";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -739,12 +740,20 @@ export default function CustomerDetail() {
                               <>{/* Main job row */}
                                 <TableRow
                                   key={j.id}
-                                  className="cursor-pointer hover:bg-muted/50"
+                                  className={cn(
+                                    "cursor-pointer hover:bg-muted/50",
+                                    (j as any).archived_at && "opacity-70 bg-muted/25",
+                                  )}
                                   onClick={() => navigate(`/operations/${j.id}`, { state: customerJobsState(customer.id) })}
                                 >
                                   <TableCell className="font-medium font-mono">
                                     {j.job_id}
                                     {subs.length > 0 && <Badge variant="outline" className="ml-2 text-[9px]">{subs.length} sub{subs.length !== 1 ? "s" : ""}</Badge>}
+                                    {(j as any).archived_at && (
+                                      <Badge variant="outline" className="ml-2 text-[9px] border-muted-foreground/50 text-muted-foreground">
+                                        Archived
+                                      </Badge>
+                                    )}
                                   </TableCell>
                                   <TableCell className="text-sm text-muted-foreground font-mono">{(j as any).claim_number || "—"}</TableCell>
                                   <TableCell>
@@ -766,10 +775,20 @@ export default function CustomerDetail() {
                                 {subs.map((sub) => (
                                   <TableRow
                                     key={sub.id}
-                                    className="cursor-pointer hover:bg-muted/50 bg-muted/20"
+                                    className={cn(
+                                      "cursor-pointer hover:bg-muted/50 bg-muted/20",
+                                      (sub as any).archived_at && "opacity-70",
+                                    )}
                                     onClick={() => navigate(`/operations/${sub.id}`, { state: customerJobsState(customer.id) })}
                                   >
-                                    <TableCell className="font-mono text-sm pl-8 text-muted-foreground">↳ {sub.job_id}</TableCell>
+                                    <TableCell className="font-mono text-sm pl-8 text-muted-foreground">
+                                      ↳ {sub.job_id}
+                                      {(sub as any).archived_at && (
+                                        <Badge variant="outline" className="ml-2 text-[9px] border-muted-foreground/50 text-muted-foreground">
+                                          Archived
+                                        </Badge>
+                                      )}
+                                    </TableCell>
                                     <TableCell className="text-xs text-muted-foreground">sub #{(sub as any).sub_number}</TableCell>
                                     <TableCell>
                                       <div className="flex gap-1 flex-wrap">

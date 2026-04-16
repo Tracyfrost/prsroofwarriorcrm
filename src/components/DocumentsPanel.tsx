@@ -34,6 +34,16 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -173,6 +183,7 @@ export function DocumentsPanel({
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
   const [previewNonPhotoDoc, setPreviewNonPhotoDoc] = useState<Document | null>(null);
   const [nonPhotoPreviewUrl, setNonPhotoPreviewUrl] = useState<string | null>(null);
+  const [deletingDoc, setDeletingDoc] = useState<Document | null>(null);
   const [renamingFileDoc, setRenamingFileDoc] = useState<Document | null>(null);
   const [renameFileValue, setRenameFileValue] = useState("");
 
@@ -979,7 +990,7 @@ export function DocumentsPanel({
                           className="h-7 w-7 text-destructive hover:text-destructive"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDelete(doc);
+                            setDeletingDoc(doc);
                           }}
                         >
                           <Trash2 className="h-3 w-3" />
@@ -1236,6 +1247,29 @@ export function DocumentsPanel({
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={!!deletingDoc} onOpenChange={(o) => !o && setDeletingDoc(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this file?</AlertDialogTitle>
+              <AlertDialogDescription>
+                &ldquo;{deletingDoc?.file_name}&rdquo; will be permanently removed. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => {
+                  if (deletingDoc) void handleDelete(deletingDoc);
+                  setDeletingDoc(null);
+                }}
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );

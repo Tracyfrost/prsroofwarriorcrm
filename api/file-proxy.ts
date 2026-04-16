@@ -52,23 +52,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-  if (!supabaseUrl || !serviceRoleKey) {
-    res.status(500).json({ error: "Server misconfiguration" });
+  if (!supabaseUrl || !serviceRoleKey || !anonKey) {
+    const missing = [
+      !supabaseUrl && "SUPABASE_URL",
+      !serviceRoleKey && "SUPABASE_SERVICE_ROLE_KEY",
+      !anonKey && "SUPABASE_ANON_KEY",
+    ].filter(Boolean);
+    console.error("file-proxy: missing env vars:", missing.join(", "));
+    res.status(500).json({ error: "Server misconfiguration", missing });
     return;
   }
 
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
     res.status(401).json({ error: "Authentication required" });
-    return;
-  }
-
-  const anonKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
-  if (!anonKey) {
-    res.status(500).json({ error: "Server misconfiguration" });
     return;
   }
 

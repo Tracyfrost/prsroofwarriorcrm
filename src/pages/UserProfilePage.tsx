@@ -31,6 +31,13 @@ import { Calendar as BigCalendar, dateFnsLocalizer } from "react-big-calendar";
 import { format as fmt, parse, startOfWeek, getDay } from "date-fns";
 import { enUS } from "date-fns/locale/en-US";
 import "react-big-calendar/lib/css/react-big-calendar.css";
+import {
+  ContextualTabsPortal,
+  contextualTabListClassName,
+  contextualTabListSidebarClassName,
+  contextualTabTriggerClassName,
+  contextualTabTriggerSidebarClassName,
+} from "@/components/layout/contextualTabNav";
 
 const DOC_TYPES = [
   { value: "document", label: "Documents", icon: FileText },
@@ -170,15 +177,33 @@ export default function UserProfilePage() {
             {/* Tabs */}
             <Card>
               <Tabs defaultValue="document" className="w-full">
-                <TabsList className="flex flex-wrap h-auto gap-1 p-2 border rounded-lg bg-muted/50">
+                <ContextualTabsPortal>
+                  <TabsList className={contextualTabListSidebarClassName()}>
+                    {DOC_TYPES.map((tab) => (
+                      <TabsTrigger
+                        key={tab.value}
+                        value={tab.value}
+                        className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5")}
+                      >
+                        <tab.icon className="h-3.5 w-3.5 shrink-0" />
+                        {tab.label}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </ContextualTabsPortal>
+                <TabsList className={contextualTabListClassName("rounded-none border-0 border-b md:hidden")}>
                   {DOC_TYPES.map((tab) => (
-                    <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5">
-                      <tab.icon className="h-3.5 w-3.5" />
+                    <TabsTrigger
+                      key={tab.value}
+                      value={tab.value}
+                      className={contextualTabTriggerClassName("inline-flex items-center gap-1.5")}
+                    >
+                      <tab.icon className="h-3.5 w-3.5 shrink-0" />
                       {tab.label}
                     </TabsTrigger>
                   ))}
                 </TabsList>
-                <div className="p-4">
+                <div className="min-w-0 flex-1 p-4">
                   <TabsContent value="document" className="mt-0">
                     <UserDocumentsTab userId={profile.user_id} documentType="document" />
                   </TabsContent>

@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -86,12 +87,12 @@ export function CustomReportRunner() {
     : [];
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 max-w-full space-y-4">
       <div className="flex flex-wrap items-end gap-4">
-        <div className="space-y-1.5">
+        <div className="min-w-0 flex-1 space-y-1.5 basis-[min(100%,14rem)] sm:flex-none sm:basis-auto">
           <Label className="text-xs">Saved report</Label>
           <Select value={selectedSavedId || "none"} onValueChange={(v) => (v === "none" ? setSelectedSavedId("") : loadSaved(v))}>
-            <SelectTrigger className="w-[200px]">
+            <SelectTrigger className="min-w-0 w-full sm:w-[200px]">
               <SelectValue placeholder="Select saved…" />
             </SelectTrigger>
             <SelectContent>
@@ -104,10 +105,10 @@ export function CustomReportRunner() {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs">Group by</Label>
           <Select value={groupBy} onValueChange={(v: any) => setGroupBy(v)}>
-            <SelectTrigger className="w-[140px]">
+            <SelectTrigger className="min-w-0 w-full sm:w-[140px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -119,23 +120,23 @@ export function CustomReportRunner() {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs">Date from</Label>
-          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-[140px]" />
+          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="min-w-0 w-full sm:w-[140px]" />
         </div>
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs">Date to</Label>
-          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-[140px]" />
+          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="min-w-0 w-full sm:w-[140px]" />
         </div>
         <Button onClick={handleRun}>
           <Play className="mr-2 h-3 w-3" /> Run
         </Button>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 w-full flex-wrap items-center gap-2 sm:w-auto">
           <Input
             placeholder="Report name to save"
             value={reportName}
             onChange={(e) => setReportName(e.target.value)}
-            className="w-[180px]"
+            className="min-w-0 flex-1 sm:w-[180px] sm:flex-none"
           />
           <Button variant="outline" onClick={handleSave} disabled={saveReport.isPending}>
             {saveReport.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -162,12 +163,20 @@ export function CustomReportRunner() {
       </div>
 
       {result && (
-        <div className="overflow-x-auto rounded-md border border-border mt-4">
-          <table className="w-full text-sm">
+        <div
+          className={cn(
+            "mt-4 w-full min-w-0 rounded-md border border-border",
+            columns.length > 8 ? "overflow-x-auto" : "overflow-x-hidden",
+          )}
+        >
+          <table className="w-full table-fixed text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50">
                 {columns.map((col) => (
-                  <th key={col} className="text-left py-2 px-3 font-semibold capitalize">
+                  <th
+                    key={col}
+                    className="min-w-0 break-words px-2 py-2 text-left text-xs font-semibold capitalize sm:px-3 sm:text-sm"
+                  >
                     {String(col).replace(/_/g, " ")}
                   </th>
                 ))}
@@ -177,7 +186,7 @@ export function CustomReportRunner() {
               {result.map((row, i) => (
                 <tr key={i} className="border-b border-border/70">
                   {columns.map((col) => (
-                    <td key={col} className="py-2 px-3">
+                    <td key={col} className="min-w-0 break-words px-2 py-2 text-xs sm:px-3 sm:text-sm">
                       {typeof row[col] === "number"
                         ? col === "rcv" || col === "acv"
                           ? `$${Number(row[col]).toLocaleString()}`

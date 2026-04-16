@@ -20,6 +20,17 @@ export function useCustomer(id: string | undefined) {
   });
 }
 
+export function useCustomers() {
+  return useQuery({
+    queryKey: ["customers"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("customers").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as Customer[];
+    },
+  });
+}
+
 export type CustomerJob = Tables<"jobs"> & {
   payment_checks?: { amount: number; status: string }[];
 };
@@ -47,8 +58,8 @@ export function useCustomerAppointments(customerId: string | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("appointments")
-        .select("*, jobs!inner(id, job_id, customer_id)")
-        .eq("jobs.customer_id", customerId!)
+        .select("*, jobs(id, job_id, customer_id)")
+        .or(`customer_id.eq.${customerId!},jobs.customer_id.eq.${customerId!}`)
         .order("date_time", { ascending: false });
       if (error) throw error;
       return data ?? [];

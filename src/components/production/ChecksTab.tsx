@@ -77,7 +77,7 @@ export function ChecksTab({ jobId }: Props) {
   })).filter((d) => d.amount > 0);
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       {/* Summary */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <Card className="shadow-card">
@@ -123,6 +123,7 @@ export function ChecksTab({ jobId }: Props) {
           </Button>
         </CardHeader>
         <CardContent className="p-0">
+          <div className="min-w-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -218,6 +219,7 @@ export function ChecksTab({ jobId }: Props) {
               ))}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

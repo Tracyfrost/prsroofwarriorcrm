@@ -64,10 +64,25 @@ interface CreateJobModalProps {
   defaultCustomerId?: string;
   defaultParentJobId?: string;
   trigger?: React.ReactNode;
+  /** When both are set, dialog is controlled by the parent (no `DialogTrigger` is rendered). */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function CreateJobModal({ defaultCustomerId, defaultParentJobId, trigger }: CreateJobModalProps) {
-  const [open, setOpen] = useState(false);
+export function CreateJobModal({
+  defaultCustomerId,
+  defaultParentJobId,
+  trigger,
+  open: openProp,
+  onOpenChange: onOpenChangeProp,
+}: CreateJobModalProps) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const isControlled = openProp !== undefined && onOpenChangeProp !== undefined;
+  const open = isControlled ? openProp : uncontrolledOpen;
+  const setOpen = (next: boolean) => {
+    if (isControlled) onOpenChangeProp(next);
+    else setUncontrolledOpen(next);
+  };
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -192,34 +207,35 @@ export function CreateJobModal({ defaultCustomerId, defaultParentJobId, trigger 
     }
   };
 
+  const handleDialogOpenChange = (v: boolean) => {
+    setOpen(v);
+    if (!v) {
+      form.reset({
+        customer_id: defaultCustomerId ?? "",
+        trade_types: [],
+        job_type: "insurance",
+        estimate_amount: 0,
+        status: "lead",
+        notes: "",
+        claim_number: "",
+        is_sub_job: subJobModeAvailable,
+        parent_job_id: defaultParentJobId ?? "",
+        jobsite_same_as_customer: true,
+        site_street: "",
+        site_city: "",
+        site_state: "",
+        site_zip: "",
+      });
+    }
+  };
+
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        setOpen(v);
-        if (!v) {
-          form.reset({
-            customer_id: defaultCustomerId ?? "",
-            trade_types: [],
-            job_type: "insurance",
-            estimate_amount: 0,
-            status: "lead",
-            notes: "",
-            claim_number: "",
-            is_sub_job: subJobModeAvailable,
-            parent_job_id: defaultParentJobId ?? "",
-            jobsite_same_as_customer: true,
-            site_street: "",
-            site_city: "",
-            site_state: "",
-            site_zip: "",
-          });
-        }
-      }}
-    >
-      <DialogTrigger asChild>
-        {trigger ?? <Button><Plus className="mr-2 h-4 w-4" /> Add Job</Button>}
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
+      {!isControlled ? (
+        <DialogTrigger asChild>
+          {trigger ?? <Button><Plus className="mr-2 h-4 w-4" /> Add Job</Button>}
+        </DialogTrigger>
+      ) : null}
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>{isSubJob ? "Create Sub Job" : "Create Job"}</DialogTitle></DialogHeader>
         <Form {...form}>

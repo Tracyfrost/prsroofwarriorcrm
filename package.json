@@ -12,7 +12,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "deploy:user-admin": "supabase functions deploy user-admin"
+    "db:push": "supabase db push",
+    "config:push": "supabase config push",
+    "deploy:user-admin": "supabase functions deploy user-admin",
+    "deploy:calendar-sync": "supabase functions deploy calendar-sync"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^17.0.0",
@@ -83,6 +86,7 @@
     "@types/node": "^22.16.5",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
+    "@vercel/node": "^5.7.7",
     "@vitejs/plugin-react-swc": "^3.11.0",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.32.0",
@@ -92,6 +96,7 @@
     "jsdom": "^20.0.3",
     "lovable-tagger": "^1.1.13",
     "postcss": "^8.5.6",
+    "supabase": "2.90.0",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",

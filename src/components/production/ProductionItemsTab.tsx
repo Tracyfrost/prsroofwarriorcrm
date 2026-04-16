@@ -321,7 +321,7 @@ export function ProductionItemsTab({
   if (productionItemsLoading) return <div className="py-12 text-center text-muted-foreground">Loading production lines...</div>;
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">War Room gates & funds</CardTitle>
@@ -375,21 +375,21 @@ export function ProductionItemsTab({
           {syncingPlanningSq ? "Syncing…" : "Sync to War Room"}
         </Button>
       </div>
-      <div className="grid grid-cols-1 gap-4 rounded-2xl border bg-card p-6 sm:grid-cols-2 lg:grid-cols-4">
-        <div>
+      <div className="grid grid-cols-1 gap-4 rounded-2xl border bg-card p-4 sm:grid-cols-2 sm:p-6 lg:grid-cols-4">
+        <div className="min-w-0">
           <p className="text-xs uppercase tracking-widest text-muted-foreground">Total Labor</p>
           <p className="text-2xl font-bold">${totalLabor.toLocaleString()}</p>
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="text-xs uppercase tracking-widest text-muted-foreground">Total Materials</p>
           <p className="text-2xl font-bold">${totalMaterial.toLocaleString()}</p>
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="text-xs uppercase tracking-widest text-muted-foreground">Line exposure (est.)</p>
           <p className="text-2xl font-bold text-primary">${totalExposure.toLocaleString()}</p>
           <p className="text-[10px] text-muted-foreground">$/sq × qty or labor+material</p>
         </div>
-        <div className="border-l border-border pl-6">
+        <div className="min-w-0 border-l border-border pl-4 sm:pl-6">
           <p className="text-xs uppercase tracking-widest text-muted-foreground">Production total</p>
           <p className="text-2xl font-bold text-primary">${grandTotal.toLocaleString()}</p>
           <p className="text-[10px] text-muted-foreground">Checks received (job): ${receivedChecksTotal.toLocaleString()}</p>
@@ -448,7 +448,7 @@ export function ProductionItemsTab({
       </Card>
 
       <Card>
-        <CardContent className="overflow-x-auto p-0">
+        <CardContent className="min-w-0 overflow-x-auto p-0">
           <Table>
             <TableHeader>
               <TableRow>

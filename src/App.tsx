@@ -13,13 +13,16 @@ import Customers from "./pages/Customers";
 import Jobs from "./pages/Jobs";
 import JobDetail from "./pages/JobDetail";
 import Operations from "./pages/Operations";
+import OperationsHub from "./pages/OperationsHub";
 import Appointments from "./pages/Appointments";
 import Commissions from "./pages/Commissions";
 import Reports from "./pages/Reports";
 import Inventory from "./pages/Inventory";
 import Production from "./pages/Production";
 import ManagerDashboard from "./pages/ManagerDashboard";
+import OfficersHub from "./pages/OfficersHub";
 import SiteCamFeed from "./pages/SiteCamFeed";
+import SiteCamCreatePhoto from "./pages/SiteCamCreatePhoto";
 import BattleLedger from "./pages/BattleLedger";
 import SettingsPage from "./pages/SettingsPage";
 import CustomersOverview from "./pages/CustomersOverview";
@@ -90,13 +93,16 @@ const App = () => (
             <Route path="/customers/:id" element={<ProtectedRoute><CustomerDetail /></ProtectedRoute>} />
             <Route path="/jobs" element={<ProtectedRoute><Jobs /></ProtectedRoute>} />
             <Route path="/jobs/:id" element={<ProtectedRoute><JobDetail /></ProtectedRoute>} />
+            <Route path="/operations" element={<ProtectedRoute><OperationsHub /></ProtectedRoute>} />
             <Route path="/operations/:id" element={<ProtectedRoute><Operations /></ProtectedRoute>} />
             <Route path="/appointments" element={<ProtectedRoute><Appointments /></ProtectedRoute>} />
             <Route path="/commissions" element={<ProtectedRoute><Commissions /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
             <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
             <Route path="/production" element={<ProtectedRoute><Production /></ProtectedRoute>} />
+            <Route path="/officers-hub" element={<ProtectedRoute><OfficersHub /></ProtectedRoute>} />
             <Route path="/manager" element={<ProtectedRoute><ManagerDashboard /></ProtectedRoute>} />
+            <Route path="/sitecam/capture" element={<ProtectedRoute><SiteCamCreatePhoto /></ProtectedRoute>} />
             <Route path="/sitecam" element={<ProtectedRoute><SiteCamFeed /></ProtectedRoute>} />
             <Route path="/battle-ledger" element={<ProtectedRoute><BattleLedger /></ProtectedRoute>} />
             <Route path="/dashboard/customers-overview" element={<ProtectedRoute><CustomersOverview /></ProtectedRoute>} />

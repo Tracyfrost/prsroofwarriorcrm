@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useCustomer, useCustomerJobs, useCustomerAppointments, useCustomerDocuments } from "@/hooks/useCustomer";
@@ -30,8 +30,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { getDocumentUrl } from "@/hooks/useDocuments";
+import { openFileViaProxy } from "@/lib/fileProxy";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { cn } from "@/lib/utils";
+import {
+  ContextualTabsPortal,
+  contextualTabListClassName,
+  contextualTabListSidebarClassName,
+  contextualTabTriggerClassName,
+  contextualTabTriggerSidebarClassName,
+} from "@/components/layout/contextualTabNav";
 import { useUpdateAppointment } from "@/hooks/useJobs";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -57,6 +65,15 @@ interface AddressFields {
 }
 
 const emptyAddress: AddressFields = { street: "", line2: "", city: "", state: "", zip: "" };
+
+const CUSTOMER_TAB_VALUES = ["details", "jobs", "appointments", "documents", "analytics"] as const;
+type CustomerTab = (typeof CUSTOMER_TAB_VALUES)[number];
+
+function customerTabFromSearchParams(sp: URLSearchParams): CustomerTab {
+  const t = sp.get("tab");
+  if (t && (CUSTOMER_TAB_VALUES as readonly string[]).includes(t)) return t as CustomerTab;
+  return "details";
+}
 
 function AddressForm({ value, onChange, label }: { value: AddressFields; onChange: (v: AddressFields) => void; label: string }) {
   return (
@@ -90,7 +107,7 @@ function AddressForm({ value, onChange, label }: { value: AddressFields; onChang
 export default function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -108,6 +125,36 @@ export default function CustomerDetail() {
   const leadSourceLabels: Record<string, string> = Object.fromEntries(leadSources.map(s => [s.name, s.display_name]));
   const statusLabels: Record<string, string> = Object.fromEntries(jobStatuses.map(s => [s.name, s.display_name]));
   const statusColors: Record<string, string> = Object.fromEntries(jobStatuses.map(s => [s.name, s.color]));
+
+  const [activeTab, setActiveTab] = useState<CustomerTab>(() => customerTabFromSearchParams(searchParams));
+  const [pendingFinancialsScroll, setPendingFinancialsScroll] = useState(false);
+  const financialsTotalsRef = useRef<HTMLTableRowElement>(null);
+
+  const setCustomerTab = (next: CustomerTab) => {
+    setActiveTab(next);
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        if (next === "details") p.delete("tab");
+        else p.set("tab", next);
+        return p;
+      },
+      { replace: true },
+    );
+  };
+
+  useEffect(() => {
+    setActiveTab(customerTabFromSearchParams(searchParams));
+  }, [id, searchParams]);
+
+  useEffect(() => {
+    if (activeTab !== "jobs" || !pendingFinancialsScroll) return;
+    const timeoutId = window.setTimeout(() => {
+      financialsTotalsRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      setPendingFinancialsScroll(false);
+    }, 120);
+    return () => window.clearTimeout(timeoutId);
+  }, [activeTab, pendingFinancialsScroll, jobs.length]);
 
   usePageTitle(customer ? `${customer.name} – Customer` : "Customer Detail");
 
@@ -331,7 +378,8 @@ export default function CustomerDetail() {
   const custLeadSource = (customer as any).lead_source;
   const custAssignedRep = (customer as any).assigned_rep_id;
 
-  const initialTab = searchParams.get("tab") === "jobs" ? "jobs" : "details";
+  const kpiButtonClass =
+    "w-full rounded-lg p-4 text-left transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 cursor-pointer";
 
   return (
     <AppLayout>
@@ -391,43 +439,120 @@ export default function CustomerDetail() {
         {/* Summary Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
           <Card className="shadow-card">
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Total Jobs</p>
-              <p className="text-2xl font-bold text-foreground">{jobs.length}</p>
+            <CardContent className="p-0">
+              <button
+                type="button"
+                className={kpiButtonClass}
+                aria-label="View jobs for this customer"
+                onClick={() => setCustomerTab("jobs")}
+              >
+                <p className="text-xs text-muted-foreground">Total Jobs</p>
+                <p className="text-2xl font-bold text-foreground">{jobs.length}</p>
+              </button>
             </CardContent>
           </Card>
           <Card className="shadow-card">
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Total RCV</p>
-              <p className="text-2xl font-bold text-foreground">${totalRcv.toLocaleString()}</p>
+            <CardContent className="p-0">
+              <button
+                type="button"
+                className={kpiButtonClass}
+                aria-label="View job financial totals — RCV"
+                onClick={() => {
+                  setCustomerTab("jobs");
+                  setPendingFinancialsScroll(true);
+                }}
+              >
+                <p className="text-xs text-muted-foreground">Total RCV</p>
+                <p className="text-2xl font-bold text-foreground">${totalRcv.toLocaleString()}</p>
+              </button>
             </CardContent>
           </Card>
           <Card className="shadow-card">
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Total ACV</p>
-              <p className="text-2xl font-bold text-foreground">${totalAcv.toLocaleString()}</p>
+            <CardContent className="p-0">
+              <button
+                type="button"
+                className={kpiButtonClass}
+                aria-label="View job financial totals — ACV"
+                onClick={() => {
+                  setCustomerTab("jobs");
+                  setPendingFinancialsScroll(true);
+                }}
+              >
+                <p className="text-xs text-muted-foreground">Total ACV</p>
+                <p className="text-2xl font-bold text-foreground">${totalAcv.toLocaleString()}</p>
+              </button>
             </CardContent>
           </Card>
           <Card className="shadow-card">
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Checks Received</p>
-              <p className="text-2xl font-bold text-foreground">${totalChecks.toLocaleString()}</p>
+            <CardContent className="p-0">
+              <button
+                type="button"
+                className={kpiButtonClass}
+                aria-label="View job financial totals — checks received"
+                onClick={() => {
+                  setCustomerTab("jobs");
+                  setPendingFinancialsScroll(true);
+                }}
+              >
+                <p className="text-xs text-muted-foreground">Checks Received</p>
+                <p className="text-2xl font-bold text-foreground">${totalChecks.toLocaleString()}</p>
+              </button>
             </CardContent>
           </Card>
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue={initialTab}>
-          <TabsList className="mb-4">
-            <TabsTrigger value="details"><StickyNote className="mr-1.5 h-3.5 w-3.5" />Details</TabsTrigger>
-            <TabsTrigger value="jobs"><Briefcase className="mr-1.5 h-3.5 w-3.5" />Jobs ({jobs.length})</TabsTrigger>
-            <TabsTrigger value="appointments"><Calendar className="mr-1.5 h-3.5 w-3.5" />Appointments</TabsTrigger>
-            <TabsTrigger value="documents"><FileText className="mr-1.5 h-3.5 w-3.5" />Documents</TabsTrigger>
-            <TabsTrigger value="analytics"><BarChart3 className="mr-1.5 h-3.5 w-3.5" />Analytics</TabsTrigger>
+        <Tabs value={activeTab} onValueChange={(v) => setCustomerTab(v as CustomerTab)}>
+          <ContextualTabsPortal>
+            <TabsList className={contextualTabListSidebarClassName()}>
+              <TabsTrigger value="details" className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5")}>
+                <StickyNote className="h-3.5 w-3.5 shrink-0" />
+                Details
+              </TabsTrigger>
+              <TabsTrigger value="jobs" className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5")}>
+                <Briefcase className="h-3.5 w-3.5 shrink-0" />
+                Jobs ({jobs.length})
+              </TabsTrigger>
+              <TabsTrigger value="appointments" className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5")}>
+                <Calendar className="h-3.5 w-3.5 shrink-0" />
+                Appointments
+              </TabsTrigger>
+              <TabsTrigger value="documents" className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5")}>
+                <FileText className="h-3.5 w-3.5 shrink-0" />
+                Documents
+              </TabsTrigger>
+              <TabsTrigger value="analytics" className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5")}>
+                <BarChart3 className="h-3.5 w-3.5 shrink-0" />
+                Analytics
+              </TabsTrigger>
+            </TabsList>
+          </ContextualTabsPortal>
+          <TabsList className={contextualTabListClassName("md:hidden")}>
+            <TabsTrigger value="details" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5")}>
+              <StickyNote className="h-3.5 w-3.5 shrink-0" />
+              Details
+            </TabsTrigger>
+            <TabsTrigger value="jobs" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5")}>
+              <Briefcase className="h-3.5 w-3.5 shrink-0" />
+              Jobs ({jobs.length})
+            </TabsTrigger>
+            <TabsTrigger value="appointments" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5")}>
+              <Calendar className="h-3.5 w-3.5 shrink-0" />
+              Appointments
+            </TabsTrigger>
+            <TabsTrigger value="documents" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5")}>
+              <FileText className="h-3.5 w-3.5 shrink-0" />
+              Documents
+            </TabsTrigger>
+            <TabsTrigger value="analytics" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5")}>
+              <BarChart3 className="h-3.5 w-3.5 shrink-0" />
+              Analytics
+            </TabsTrigger>
           </TabsList>
 
+          <div className="min-w-0 flex-1 mt-4 md:mt-6">
           {/* DETAILS TAB */}
-          <TabsContent value="details">
+          <TabsContent value="details" className="mt-0">
             {editing ? (
               <form onSubmit={(e) => { e.preventDefault(); updateCustomer.mutate(); }}>
                 <Accordion type="multiple" defaultValue={["basic", "address", "other"]} className="space-y-3">
@@ -704,10 +829,11 @@ export default function CustomerDetail() {
           </TabsContent>
 
           {/* JOBS TAB - Hierarchical View */}
-          <TabsContent value="jobs">
+          <TabsContent value="jobs" className="mt-0">
             <Card className="shadow-card">
               <CardContent className="p-0">
-                <Table>
+                <div className="max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
+                  <Table className="min-w-[720px]" containerClassName="relative w-full min-w-0 overflow-visible">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Job ID</TableHead>
@@ -811,7 +937,7 @@ export default function CustomerDetail() {
                             );
                           });
                         })()}
-                        <TableRow className="bg-muted/30 font-medium">
+                        <TableRow ref={financialsTotalsRef} className="bg-muted/30 font-medium">
                           <TableCell colSpan={4} className="text-right text-sm">Totals</TableCell>
                           <TableCell className="text-right text-sm">${totalAcv.toLocaleString()}</TableCell>
                           <TableCell className="text-right text-sm">${totalRcv.toLocaleString()}</TableCell>
@@ -821,12 +947,13 @@ export default function CustomerDetail() {
                     )}
                   </TableBody>
                 </Table>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
           {/* APPOINTMENTS TAB */}
-          <TabsContent value="appointments">
+          <TabsContent value="appointments" className="mt-0">
             <Card className="shadow-card">
               <CardContent className="p-0">
                 <Table>
@@ -920,7 +1047,7 @@ export default function CustomerDetail() {
           </TabsContent>
 
           {/* DOCUMENTS TAB */}
-          <TabsContent value="documents">
+          <TabsContent value="documents" className="mt-0">
             <Card className="shadow-card">
               <CardContent className="p-0">
                 <Table>
@@ -945,8 +1072,7 @@ export default function CustomerDetail() {
                               className="text-sm font-medium text-primary hover:underline"
                               onClick={async () => {
                                 try {
-                                  const url = await getDocumentUrl(d.file_path);
-                                  window.open(url, "_blank");
+                                  await openFileViaProxy("job-documents", d.file_path);
                                 } catch {
                                   toast({ title: "Error opening document", variant: "destructive" });
                                 }
@@ -968,13 +1094,14 @@ export default function CustomerDetail() {
           </TabsContent>
 
           {/* ANALYTICS TAB */}
-          <TabsContent value="analytics">
+          <TabsContent value="analytics" className="mt-0">
             <CustomerAnalyticsTab
               jobs={jobs}
               appointments={appointments}
               customerCreatedAt={customer.created_at}
             />
           </TabsContent>
+          </div>
         </Tabs>
       </div>
     </AppLayout>

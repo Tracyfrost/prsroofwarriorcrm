@@ -6,13 +6,16 @@ const ROUTE_TITLE_PATTERNS: { pattern: RegExp; label: (match: RegExpMatchArray) 
   { pattern: /^\/$/, label: () => "Dashboard" },
   { pattern: /^\/jobs$/, label: () => "Jobs" },
   { pattern: /^\/jobs\/([^/]+)$/, label: (m) => `Job ${m[1]}` },
+  { pattern: /^\/operations$/, label: () => "Operations" },
   { pattern: /^\/operations\/([^/]+)$/, label: (m) => `Operations ${m[1]}` },
+  { pattern: /^\/officers-hub$/, label: () => "Officers Hub" },
   { pattern: /^\/customers$/, label: () => "Customers" },
   { pattern: /^\/customers\/([^/]+)$/, label: () => "Customer Detail" },
   { pattern: /^\/appointments/, label: () => "Appointments" },
   { pattern: /^\/production/, label: () => "Production" },
   { pattern: /^\/settings/, label: () => "Settings" },
   { pattern: /^\/reports/, label: () => "Reports" },
+  { pattern: /^\/sitecam\/capture$/, label: () => "Create SiteCam photo" },
 ];
 
 export function usePageTitle(explicitLabel?: string) {

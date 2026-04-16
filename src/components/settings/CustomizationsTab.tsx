@@ -84,7 +84,7 @@ function LeadSourcesSection() {
   };
 
   return (
-    <Card className="shadow-card">
+    <Card className="min-w-0 max-w-full shadow-card">
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-base flex items-center gap-2">
           <Tag className="h-4 w-4" />
@@ -100,25 +100,25 @@ function LeadSourcesSection() {
         </div>
       </CardContent>
       <CardContent className="p-0">
-        <Table>
+        <Table containerClassName="overflow-visible" className="table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead>Display</TableHead>
-              <TableHead>Key</TableHead>
-              <TableHead>Color</TableHead>
-              <TableHead>Active</TableHead>
-              <TableHead className="w-[220px]">Actions</TableHead>
+              <TableHead className="min-w-0 w-[22%]">Display</TableHead>
+              <TableHead className="min-w-0 w-[18%]">Key</TableHead>
+              <TableHead className="min-w-0 w-[18%]">Color</TableHead>
+              <TableHead className="w-24">Active</TableHead>
+              <TableHead className="min-w-0">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {sources.map((source, index) => (
               <TableRow key={source.id}>
-                <TableCell className="font-medium">
+                <TableCell className="min-w-0 break-words font-medium">
                   {editId === source.id ? (
                     <Input value={editDisplay} onChange={(e) => setEditDisplay(e.target.value)} />
                   ) : source.display_name}
                 </TableCell>
-                <TableCell className="font-mono text-xs text-muted-foreground">{source.name}</TableCell>
+                <TableCell className="min-w-0 break-all font-mono text-xs text-muted-foreground">{source.name}</TableCell>
                 <TableCell>
                   {editId === source.id ? (
                     <Input type="color" className="h-9 w-20" value={editColor} onChange={(e) => setEditColor(e.target.value)} />
@@ -132,8 +132,8 @@ function LeadSourcesSection() {
                 <TableCell>
                   <Switch checked={source.active} onCheckedChange={(checked) => updateLeadSource.mutate({ id: source.id, active: checked })} />
                 </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
+                <TableCell className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1">
                     {editId === source.id ? (
                       <Button size="sm" variant="outline" onClick={saveEdit}><Save className="h-3 w-3" /></Button>
                     ) : (
@@ -202,7 +202,7 @@ function JobStatusesSection() {
   };
 
   return (
-    <Card className="shadow-card">
+    <Card className="min-w-0 max-w-full shadow-card">
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-base flex items-center gap-2">
           <Palette className="h-4 w-4" />
@@ -218,27 +218,27 @@ function JobStatusesSection() {
         </div>
       </CardContent>
       <CardContent className="p-0">
-        <Table>
+        <Table containerClassName="overflow-visible" className="table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead>Seq</TableHead>
-              <TableHead>Display</TableHead>
-              <TableHead>Key</TableHead>
-              <TableHead>Color</TableHead>
-              <TableHead>Active</TableHead>
-              <TableHead className="w-[220px]">Actions</TableHead>
+              <TableHead className="w-14">Seq</TableHead>
+              <TableHead className="min-w-0 w-[20%]">Display</TableHead>
+              <TableHead className="min-w-0 w-[16%]">Key</TableHead>
+              <TableHead className="min-w-0 w-[16%]">Color</TableHead>
+              <TableHead className="w-24">Active</TableHead>
+              <TableHead className="min-w-0">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {statuses.map((status, index) => (
               <TableRow key={status.id}>
                 <TableCell>{status.sequence}</TableCell>
-                <TableCell className="font-medium">
+                <TableCell className="min-w-0 break-words font-medium">
                   {editId === status.id ? (
                     <Input value={editDisplay} onChange={(e) => setEditDisplay(e.target.value)} />
                   ) : status.display_name}
                 </TableCell>
-                <TableCell className="font-mono text-xs text-muted-foreground">{status.name}</TableCell>
+                <TableCell className="min-w-0 break-all font-mono text-xs text-muted-foreground">{status.name}</TableCell>
                 <TableCell>
                   {editId === status.id ? (
                     <Input type="color" className="h-9 w-20" value={editColor} onChange={(e) => setEditColor(e.target.value)} />
@@ -252,8 +252,8 @@ function JobStatusesSection() {
                 <TableCell>
                   <Switch checked={status.active} onCheckedChange={(checked) => updateStatus.mutate({ id: status.id, active: checked })} />
                 </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
+                <TableCell className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1">
                     {editId === status.id ? (
                       <Button size="sm" variant="outline" onClick={() => { updateStatus.mutate({ id: status.id, display_name: editDisplay, color: editColor }); setEditId(null); }}>
                         <Save className="h-3 w-3" />
@@ -290,7 +290,7 @@ function StatusBranchesSection() {
   const [branchAddStatus, setBranchAddStatus] = useState<Record<string, string>>({});
 
   return (
-    <Card className="shadow-card">
+    <Card className="min-w-0 max-w-full shadow-card">
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
           <GitBranch className="h-4 w-4" />
@@ -336,12 +336,12 @@ function StatusBranchesSection() {
                   </Button>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:items-center">
                 <Select
                   value={branchAddStatus[branch.id] ?? ""}
                   onValueChange={(value) => setBranchAddStatus((prev) => ({ ...prev, [branch.id]: value }))}
                 >
-                  <SelectTrigger className="max-w-xs">
+                  <SelectTrigger className="min-w-0 w-full sm:max-w-xs">
                     <SelectValue placeholder="Add status to branch" />
                   </SelectTrigger>
                   <SelectContent>
@@ -413,7 +413,7 @@ function ProductionMilestonesSection() {
   };
 
   return (
-    <Card className="shadow-card">
+    <Card className="min-w-0 max-w-full shadow-card">
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-base flex items-center gap-2">
           <Milestone className="h-4 w-4" />
@@ -422,8 +422,8 @@ function ProductionMilestonesSection() {
         <Badge variant="outline">{milestones.length}</Badge>
       </CardHeader>
       <CardContent className="border-b p-3">
-        <div className="flex gap-2">
-          <Input placeholder="Add milestone display name" value={newDisplay} onChange={(e) => setNewDisplay(e.target.value)} />
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <Input className="min-w-0 flex-1 sm:min-w-[12rem]" placeholder="Add milestone display name" value={newDisplay} onChange={(e) => setNewDisplay(e.target.value)} />
           <Button
             onClick={() => {
               if (!newDisplay.trim()) return;
@@ -443,12 +443,12 @@ function ProductionMilestonesSection() {
       </CardContent>
       <CardContent className="space-y-2">
         {milestones.map((milestone, index) => (
-          <div key={milestone.id} className="flex items-center justify-between rounded-md border px-3 py-2">
-            <div>
-              <p className="font-medium">{milestone.display_name}</p>
-              <p className="font-mono text-xs text-muted-foreground">{milestone.name}</p>
+          <div key={milestone.id} className="flex min-w-0 flex-col gap-2 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="break-words font-medium">{milestone.display_name}</p>
+              <p className="break-all font-mono text-xs text-muted-foreground">{milestone.name}</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Switch checked={milestone.active} onCheckedChange={(checked) => updateMilestone.mutate({ id: milestone.id, active: checked })} />
               <Button size="sm" variant="outline" onClick={() => moveMilestone(index, -1)}>Up</Button>
               <Button size="sm" variant="outline" onClick={() => moveMilestone(index, 1)}>Down</Button>
@@ -483,7 +483,7 @@ function ProductionItemStatusesSection() {
   };
 
   return (
-    <Card className="shadow-card">
+    <Card className="min-w-0 max-w-full shadow-card">
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-base flex items-center gap-2">
           <Palette className="h-4 w-4" />
@@ -516,15 +516,15 @@ function ProductionItemStatusesSection() {
       </CardContent>
       <CardContent className="space-y-2">
         {statuses.map((status, index) => (
-          <div key={status.id} className="flex items-center justify-between rounded-md border px-3 py-2">
-            <div className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded-full border" style={{ backgroundColor: status.color }} />
-              <div>
-                <p className="font-medium">{status.display_name}</p>
-                <p className="font-mono text-xs text-muted-foreground">{status.name}</p>
+          <div key={status.id} className="flex min-w-0 flex-col gap-2 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-2">
+              <span className="mt-1 h-3 w-3 shrink-0 rounded-full border" style={{ backgroundColor: status.color }} />
+              <div className="min-w-0">
+                <p className="break-words font-medium">{status.display_name}</p>
+                <p className="break-all font-mono text-xs text-muted-foreground">{status.name}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Switch checked={status.active} onCheckedChange={(checked) => updateStatus.mutate({ id: status.id, active: checked })} />
               <Button size="sm" variant="outline" onClick={() => moveStatus(index, -1)}>Up</Button>
               <Button size="sm" variant="outline" onClick={() => moveStatus(index, 1)}>Down</Button>
@@ -541,7 +541,7 @@ function ProductionItemStatusesSection() {
 
 export function CustomizationsTab() {
   return (
-    <div className="space-y-8 p-6">
+    <div className="min-w-0 max-w-full space-y-8 p-4 sm:p-6">
       <LeadSourcesSection />
       <JobStatusesSection />
       <StatusBranchesSection />

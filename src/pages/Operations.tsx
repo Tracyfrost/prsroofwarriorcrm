@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -19,13 +19,13 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { ResponsiveModal } from "@/components/ui/responsive-modal";
 import { AddressLink } from "@/components/AddressLink";
 import { CreateJobModal } from "@/components/jobs/CreateJobModal";
 import { SiteCamGallery } from "@/components/sitecam/SiteCamGallery";
 import { EditJobModal } from "@/components/jobs/EditJobModal";
+import { JobHeaderActionsMenu } from "@/components/jobs/JobHeaderActionsMenu";
 import { ProductionSection } from "@/components/production/ProductionSection";
 import { DualWorkflowStatusBar } from "@/components/job/DualWorkflowStatusBar";
 import MilestonesMainTab from "@/components/job/MilestonesMainTab";
@@ -46,7 +46,6 @@ import { useTradeTypes } from "@/hooks/useProduction";
 import { useStatusBranches } from "@/hooks/useStatusBranches";
 import { useJobStatuses } from "@/hooks/useCustomizations";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { formatSupabaseErr } from "@/hooks/useDocuments";
 import type { Qualification } from "@/hooks/useJobProduction";
@@ -54,19 +53,25 @@ import { JobAppointmentsBlock } from "@/components/appointments/JobAppointmentsB
 import {
   ArrowLeft,
   Camera,
+  ChevronDown,
   DollarSign,
-  Hammer,
-  Pencil,
   Plus,
   Save,
-  Trash2,
   Upload,
   Users,
   X,
   Archive,
-  ArchiveRestore,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { resolveJobsBackPath, type JobNavigationState } from "@/lib/jobNavigation";
+import { useMediaMdUp } from "@/hooks/useMediaMdUp";
+import {
+  ContextualTabsPortal,
+  contextualTabListClassName,
+  contextualTabTriggerClassName,
+  jobPageHorizontalPrimaryTabsListClassName,
+  jobPageHorizontalPrimaryTabsTriggerClassName,
+} from "@/components/layout/contextualTabNav";
 
 const ASSIGNMENT_ROLES = [
   { value: "primary_rep", label: "Primary Rep" },
@@ -116,12 +121,49 @@ export default function Operations() {
   const [tradesModalOpen, setTradesModalOpen] = useState(false);
   const [selectedTrades, setSelectedTrades] = useState<string[]>([]);
   const [editJobOpen, setEditJobOpen] = useState(false);
+  const [createSubJobOpen, setCreateSubJobOpen] = useState(false);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [productionSectionKey, setProductionSectionKey] = useState(0);
+  const [productionInitialSubTab, setProductionInitialSubTab] = useState("overview");
+  const mdUp = useMediaMdUp();
+  const [chromeOpen, setChromeOpen] = useState(true);
+
+  useEffect(() => {
+    const s = location.state as JobNavigationState | null;
+    if (!s?.openJobFiles || !id) return;
+    setActiveTab("items");
+    setProductionInitialSubTab("job-files");
+    setProductionSectionKey((k) => k + 1);
+    const { openJobFiles: _removed, ...rest } = s;
+    const nextState = Object.keys(rest).length > 0 ? (rest as JobNavigationState) : null;
+    navigate(
+      { pathname: location.pathname, search: location.search, hash: location.hash },
+      { replace: true, state: nextState },
+    );
+  }, [location.state, location.pathname, location.search, location.hash, id, navigate]);
+
+  useEffect(() => {
+    if (mdUp) return;
+    setChromeOpen(activeTab !== "items");
+  }, [activeTab, mdUp]);
+
+  const requestOpenJobFiles = useCallback(() => {
+    if (!id) return;
+    const prev = (location.state ?? {}) as JobNavigationState;
+    navigate(
+      { pathname: `/operations/${id}`, search: location.search, hash: location.hash },
+      { state: { ...prev, openJobFiles: true } },
+    );
+  }, [id, location.search, location.hash, location.state, navigate]);
+
   const isSubJob = !!job && !!(job as any).parent_job_id;
   const isMainJob = !!job && !isSubJob;
   const { data: subJobsList = [] } = useSubJobs(isMainJob ? job?.id : undefined);
 
   const navState = (location.state as JobNavigationState | null) ?? null;
   const backToJobsPath = resolveJobsBackPath(navState);
+  const showChrome = mdUp || chromeOpen;
 
   if (isLoading) {
     return (
@@ -242,9 +284,26 @@ export default function Operations() {
 
   return (
     <AppLayout>
-      <div className={`min-h-screen bg-background pb-10 ${isArchived ? "opacity-95" : ""}`}>
-        <div className="sticky top-0 z-40 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-          <div className="mx-auto max-w-7xl px-4 py-3 sm:py-4">
+      <div className={`min-h-screen min-w-0 max-w-full bg-background pb-10 ${isArchived ? "opacity-95" : ""}`}>
+        <div className="sticky top-12 z-30 min-w-0 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+          {/* Mobile compact header — always visible below md */}
+          {!mdUp && (
+            <div className="flex items-center justify-between gap-2 px-1 py-2 min-h-[44px]">
+              <div className="flex items-center gap-2 min-w-0">
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => navigate(backToJobsPath)}>
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                </Button>
+                <h1 className="truncate text-sm font-bold">{job.job_id}</h1>
+                <Badge variant="outline" className="capitalize shrink-0 text-[10px]">{job.status}</Badge>
+              </div>
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setChromeOpen(!chromeOpen)} aria-label={chromeOpen ? "Collapse job details" : "Expand job details"}>
+                <ChevronDown className={cn("h-4 w-4 transition-transform", chromeOpen && "rotate-180")} />
+              </Button>
+            </div>
+          )}
+
+          {showChrome && (
+          <div className="w-full min-w-0 py-3 sm:py-4">
             {isArchived && (
               <div className="mb-3 flex items-start gap-2 rounded-md border border-border bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground">
                 <Archive className="h-4 w-4 shrink-0 mt-0.5 text-foreground/70" />
@@ -283,132 +342,30 @@ export default function Operations() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-                <Button variant="outline" className="min-h-[44px]" onClick={() => setEditJobOpen(true)}>
-                  <Pencil className="mr-2 h-4 w-4" />
-                  Edit Job
-                </Button>
-                <Button
-                  variant="outline"
-                  className="min-h-[44px]"
-                  onClick={() => {
+              <div className="w-full lg:w-auto">
+                <JobHeaderActionsMenu
+                  isMainJob={isMainJob}
+                  isArchived={isArchived}
+                  canEditJob={canEditJob}
+                  canDeleteJob={canDeleteJob}
+                  unarchivePending={setJobArchived.isPending}
+                  onEditJob={() => setEditJobOpen(true)}
+                  onForgeTrades={() => {
                     setTradesModalOpen(true);
                     setSelectedTrades(job.trade_types ?? []);
                   }}
-                >
-                  <Hammer className="mr-2 h-4 w-4" />
-                  Forge Trades
-                </Button>
-                <CreateJobModal
-                  defaultCustomerId={job.customer_id}
-                  defaultParentJobId={job.id}
-                  trigger={
-                    <Button className="min-h-[44px]">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Sub Job
-                    </Button>
-                  }
+                  onAddSubJob={() => setCreateSubJobOpen(true)}
+                  onArchive={() => setArchiveDialogOpen(true)}
+                  onUnarchive={async () => {
+                    try {
+                      await setJobArchived.mutateAsync({ jobId: job.id, archived: false });
+                      toast({ title: "Job unarchived" });
+                    } catch (error: any) {
+                      toast({ title: "Error", description: error.message, variant: "destructive" });
+                    }
+                  }}
+                  onDelete={() => setDeleteDialogOpen(true)}
                 />
-                {canEditJob && !isArchived && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="outline" className="min-h-[44px]">
-                        <Archive className="mr-2 h-4 w-4" />
-                        Archive
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Archive {job.job_id}?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This marks the job as archived{isMainJob && subJobsList.length > 0 ? ` (and its ${subJobsList.length} sub-job(s))` : ""}. It stays visible with muted styling and is excluded from aggregate reports.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={async () => {
-                            try {
-                              await setJobArchived.mutateAsync({ jobId: job.id, archived: true });
-                              toast({ title: "Job archived" });
-                            } catch (error: any) {
-                              toast({ title: "Error", description: error.message, variant: "destructive" });
-                            }
-                          }}
-                        >
-                          Archive
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
-                {canEditJob && isArchived && (
-                  <Button
-                    variant="outline"
-                    className="min-h-[44px]"
-                    disabled={setJobArchived.isPending}
-                    onClick={async () => {
-                      try {
-                        await setJobArchived.mutateAsync({ jobId: job.id, archived: false });
-                        toast({ title: "Job unarchived" });
-                      } catch (error: any) {
-                        toast({ title: "Error", description: error.message, variant: "destructive" });
-                      }
-                    }}
-                  >
-                    <ArchiveRestore className="mr-2 h-4 w-4" />
-                    Unarchive
-                  </Button>
-                )}
-                {canDeleteJob ? (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="destructive" className="min-h-[44px]">
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete {job.job_id}?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This soft-deletes this job and hides it from listings.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          onClick={async () => {
-                            try {
-                              await softDeleteJob.mutateAsync(job.id);
-                              navigate("/jobs");
-                              toast({ title: "Job deleted" });
-                            } catch (error: any) {
-                              toast({ title: "Error", description: error.message, variant: "destructive" });
-                            }
-                          }}
-                        >
-                          Delete
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                ) : (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="inline-flex min-h-[44px] items-stretch">
-                        <Button variant="destructive" className="min-h-[44px] flex-1 pointer-events-none opacity-50" disabled>
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="max-w-xs">
-                      Only owners and executive admins can delete jobs. Archive the job instead if you need to set it aside from active work.
-                    </TooltipContent>
-                  </Tooltip>
-                )}
               </div>
             </div>
 
@@ -424,30 +381,129 @@ export default function Operations() {
               </div>
             </div>
           </div>
+          )}
+
+          <AlertDialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Archive {job.job_id}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This marks the job as archived{isMainJob && subJobsList.length > 0 ? ` (and its ${subJobsList.length} sub-job(s))` : ""}. It stays visible with muted styling and is excluded from aggregate reports.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={async () => {
+                    try {
+                      await setJobArchived.mutateAsync({ jobId: job.id, archived: true });
+                      setArchiveDialogOpen(false);
+                      toast({ title: "Job archived" });
+                    } catch (error: any) {
+                      toast({ title: "Error", description: error.message, variant: "destructive" });
+                    }
+                  }}
+                >
+                  Archive
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete {job.job_id}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This soft-deletes this job and hides it from listings.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={async () => {
+                    try {
+                      await softDeleteJob.mutateAsync(job.id);
+                      setDeleteDialogOpen(false);
+                      navigate("/jobs");
+                      toast({ title: "Job deleted" });
+                    } catch (error: any) {
+                      toast({ title: "Error", description: error.message, variant: "destructive" });
+                    }
+                  }}
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {isMainJob && (
+            <CreateJobModal
+              defaultCustomerId={job.customer_id}
+              defaultParentJobId={job.id}
+              open={createSubJobOpen}
+              onOpenChange={setCreateSubJobOpen}
+            />
+          )}
         </div>
 
-        <div className="mx-auto max-w-7xl px-4 py-6">
-          <DualWorkflowStatusBar
-            allStatuses={jobStatuses}
-            branches={branches}
-            mainStatus={job.status}
-            supplementStatus={(job as any).supplement_status}
-            hasSupplement={(job as any).has_supplement ?? false}
-            onMainStatusChange={handleMainStatusChange}
-            onSupplementStatusChange={handleSupplementStatusChange}
-            onToggleSupplement={handleToggleSupplement}
-          />
+        <div className="w-full min-w-0 py-6">
+          {showChrome && (
+            <DualWorkflowStatusBar
+              allStatuses={jobStatuses}
+              branches={branches}
+              mainStatus={job.status}
+              supplementStatus={(job as any).supplement_status}
+              hasSupplement={(job as any).has_supplement ?? false}
+              onMainStatusChange={handleMainStatusChange}
+              onSupplementStatusChange={handleSupplementStatusChange}
+              onToggleSupplement={handleToggleSupplement}
+            />
+          )}
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6 w-full">
-            <TabsList className="grid h-auto w-full grid-cols-2 gap-1 md:grid-cols-5">
-              <TabsTrigger value="overview" className="min-h-[44px]">Main Overview</TabsTrigger>
-              <TabsTrigger value="items" className="min-h-[44px]">War Room</TabsTrigger>
-              <TabsTrigger value="milestones" className="min-h-[44px]">Milestones</TabsTrigger>
-              <TabsTrigger value="financials" className="min-h-[44px]">Financials</TabsTrigger>
-              <TabsTrigger value="sitecam" className="min-h-[44px]">SiteCam</TabsTrigger>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6 w-full min-w-0">
+            <TabsList className={contextualTabListClassName("md:hidden")}>
+              <TabsTrigger value="overview" className={contextualTabTriggerClassName()}>
+                Main Overview
+              </TabsTrigger>
+              <TabsTrigger value="items" className={contextualTabTriggerClassName()}>
+                War Room
+              </TabsTrigger>
+              <TabsTrigger value="milestones" className={contextualTabTriggerClassName()}>
+                Milestones
+              </TabsTrigger>
+              <TabsTrigger value="financials" className={contextualTabTriggerClassName()}>
+                Financials
+              </TabsTrigger>
+              <TabsTrigger value="sitecam" className={contextualTabTriggerClassName()}>
+                SiteCam
+              </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="overview" className="mt-6 space-y-6">
+            <ContextualTabsPortal>
+              <TabsList className={jobPageHorizontalPrimaryTabsListClassName()}>
+                <TabsTrigger value="overview" className={jobPageHorizontalPrimaryTabsTriggerClassName()}>
+                  Main Overview
+                </TabsTrigger>
+                <TabsTrigger value="items" className={jobPageHorizontalPrimaryTabsTriggerClassName()}>
+                  War Room
+                </TabsTrigger>
+                <TabsTrigger value="milestones" className={jobPageHorizontalPrimaryTabsTriggerClassName()}>
+                  Milestones
+                </TabsTrigger>
+                <TabsTrigger value="financials" className={jobPageHorizontalPrimaryTabsTriggerClassName()}>
+                  Financials
+                </TabsTrigger>
+                <TabsTrigger value="sitecam" className={jobPageHorizontalPrimaryTabsTriggerClassName()}>
+                  SiteCam
+                </TabsTrigger>
+              </TabsList>
+            </ContextualTabsPortal>
+
+            <div className="min-w-0 flex-1 mt-4 md:mt-6">
+            <TabsContent value="overview" className="mt-0 min-w-0 space-y-6 md:mt-0">
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
                 <div className="space-y-6 lg:col-span-7">
                   <Card>
@@ -551,7 +607,7 @@ export default function Operations() {
                     </CardContent>
                   </Card>
 
-                  <JobAppointmentsBlock layout="sidebar" jobId={job.id} appointments={appointments} />
+                  <JobAppointmentsBlock layout="sidebar" jobId={job.id} appointments={appointments} addMode="dialog" />
 
                   <Card>
                     <CardHeader>
@@ -569,6 +625,13 @@ export default function Operations() {
                         </Button>
                       </div>
                       <p className="text-center text-xs text-muted-foreground">Use SiteCam to document roof conditions fast.</p>
+                      <button
+                        type="button"
+                        onClick={requestOpenJobFiles}
+                        className="w-full text-center text-xs font-medium text-primary underline-offset-2 hover:underline"
+                      >
+                        Job Files
+                      </button>
                     </CardContent>
                   </Card>
                 </div>
@@ -605,7 +668,7 @@ export default function Operations() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="milestones" className="mt-6 space-y-6">
+            <TabsContent value="milestones" className="mt-0 min-w-0 space-y-6 md:mt-0">
               <div className="space-y-8">
                 <MilestonesMainTab jobId={job.id} />
                 <MilestonesSubTab jobId={job.id} />
@@ -643,8 +706,9 @@ export default function Operations() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="items" className="mt-6">
+            <TabsContent value="items" className="mt-0 min-w-0 md:mt-0">
               <ProductionSection
+                key={productionSectionKey}
                 jobId={job.id}
                 jobDisplayId={(job as any).job_id}
                 milestones={(job as any).production_milestones ?? {}}
@@ -659,11 +723,12 @@ export default function Operations() {
                 isMainJob={isMainJob}
                 parentClaimNumber={isSubJob ? (job as any).claim_number : null}
                 carrierFromCustomer={customer?.insurance_carrier ?? null}
-                subNavGreenGlow={activeTab === "items"}
+                initialSubTab={productionInitialSubTab}
+                onGoToSiteCam={() => setActiveTab("sitecam")}
               />
             </TabsContent>
 
-            <TabsContent value="financials" className="mt-6 space-y-6">
+            <TabsContent value="financials" className="mt-0 min-w-0 space-y-6 md:mt-0">
               <Card>
                 <CardHeader>
                   <CardTitle>Financial Breakdown</CardTitle>
@@ -677,16 +742,17 @@ export default function Operations() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="sitecam" className="mt-6">
+            <TabsContent value="sitecam" className="mt-0 min-w-0 md:mt-0">
               <Card>
                 <CardHeader>
                   <CardTitle>SiteCam Gallery</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <SiteCamGallery jobId={job.id} />
+                  <SiteCamGallery jobId={job.id} jobPageContext="operations" />
                 </CardContent>
               </Card>
             </TabsContent>
+            </div>
           </Tabs>
         </div>
       </div>

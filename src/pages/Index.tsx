@@ -19,12 +19,12 @@ import {
   LayoutGrid,
   BarChart3,
   BookUser,
+  Camera,
+  ImagePlus,
 } from "lucide-react";
 import { useProfile, useUserRoles } from "@/hooks/useProfile";
 import { useMyProfile } from "@/hooks/useHierarchy";
 import { LEVEL_CONFIG } from "@/hooks/useHierarchy";
-import { useWhiteLabelDefaults } from "@/hooks/useWhiteLabel";
-import { KnotShieldLogo } from "@/components/KnotShieldLogo";
 import { Link } from "react-router-dom";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { AddCustomerModal } from "@/components/customer/AddCustomerModal";
@@ -126,7 +126,6 @@ export default function Index() {
   const { data: profile } = useProfile();
   const { data: myProfile } = useMyProfile();
   const { data: myRoles = [] } = useUserRoles();
-  const { companyName } = useWhiteLabelDefaults();
   const { can } = usePermissions();
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
   const isAdmin = myRoles.some((r) => ["manager", "owner", "office_admin"].includes(r));
@@ -173,38 +172,25 @@ export default function Index() {
   return (
     <AppLayout>
       <PageWrapper className="pb-24">
-        {/* Hero Banner */}
-        <div className="mb-6 sm:mb-8 rounded-xl gradient-command p-4 sm:p-6 text-white relative overflow-hidden">
-          <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-10 pointer-events-none hidden sm:block">
-            <KnotShieldLogo size={120} />
-          </div>
-          <div className="relative z-10 min-w-0">
-            <div className="flex items-start sm:items-center gap-3 mb-2">
-              <KnotShieldLogo size={40} className="shrink-0" />
+        {/* Mission launch — quick actions + FAB */}
+        <Card className="mb-8 shadow-card border-accent/20">
+          <CardHeader className="pb-2">
+            <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
-                <h1 className="font-display text-lg sm:text-2xl font-bold uppercase tracking-wide break-words">
-                  {companyName} — Command Center
-                </h1>
-                <p className="text-xs sm:text-sm text-white/70">
+                <CardTitle className="text-base font-display uppercase tracking-wide flex items-center gap-2">
+                  <LayoutGrid className="h-4 w-4 text-accent" />
+                  Mission launch
+                </CardTitle>
+                <p className="text-xs text-muted-foreground font-normal mt-1">
                   {profile?.name ? `Welcome back, ${profile.name}.` : "Welcome back."}{" "}
                   {isAdmin ? "Execute the plan. Lead the mission." : "Secure every opportunity. Dominate the field."}
                 </p>
               </div>
+              <Badge variant="outline" className="text-xs shrink-0">
+                {levelConfig.badge} {levelConfig.label}
+              </Badge>
             </div>
-            <Badge variant="outline" className="text-xs border-white/30 text-white/80 mt-1">
-              {levelConfig.badge} {levelConfig.label}
-            </Badge>
-          </div>
-        </div>
-
-        {/* Mission launch — quick actions + FAB */}
-        <Card className="mb-8 shadow-card border-accent/20">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-display uppercase tracking-wide flex items-center gap-2">
-              <LayoutGrid className="h-4 w-4 text-accent" />
-              Mission launch
-            </CardTitle>
-            <p className="text-xs text-muted-foreground font-normal">
+            <p className="text-xs text-muted-foreground font-normal mt-2">
               Add contacts, manage leads, schedule deployments, and view install calendars from one place.
             </p>
           </CardHeader>
@@ -296,6 +282,14 @@ export default function Index() {
                   </Link>
                 </DropdownMenuItem>
               )}
+              {can("view_sitecam") && (
+                <DropdownMenuItem asChild>
+                  <Link to="/sitecam/capture">
+                    <ImagePlus className="mr-2 h-4 w-4" />
+                    Create photo
+                  </Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuLabel>Go to</DropdownMenuLabel>
               <DropdownMenuItem asChild>
@@ -315,6 +309,14 @@ export default function Index() {
                   <Link to="/production">
                     <Hammer className="mr-2 h-4 w-4" />
                     Production / installs
+                  </Link>
+                </DropdownMenuItem>
+              )}
+              {can("view_sitecam") && (
+                <DropdownMenuItem asChild>
+                  <Link to="/sitecam">
+                    <Camera className="mr-2 h-4 w-4" />
+                    SiteCam
                   </Link>
                 </DropdownMenuItem>
               )}

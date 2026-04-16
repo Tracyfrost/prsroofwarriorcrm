@@ -8,6 +8,13 @@ import { MyCallList } from "@/components/callsetter/MyCallList";
 import { MasterLeadsGrid } from "@/components/callsetter/MasterLeadsGrid";
 import { SegmentsTab } from "@/components/callsetter/SegmentsTab";
 import { SetterPerformanceTab } from "@/components/callsetter/SetterPerformanceTab";
+import {
+  ContextualTabsPortal,
+  contextualTabListClassName,
+  contextualTabListSidebarClassName,
+  contextualTabTriggerClassName,
+  contextualTabTriggerSidebarClassName,
+} from "@/components/layout/contextualTabNav";
 
 export default function CallCommand() {
   const [tab, setTab] = useState("my-calls");
@@ -20,16 +27,62 @@ export default function CallCommand() {
         <div className="space-y-4">
           <h1 className="text-2xl font-bold text-foreground">⚔️ Call Command</h1>
           <Tabs value={tab} onValueChange={setTab} className="w-full">
-            <TabsList className="w-full flex flex-wrap gap-1">
-              <TabsTrigger value="my-calls" className="min-h-[44px]">My Call List</TabsTrigger>
-              {canAdmin && <TabsTrigger value="master-leads" className="min-h-[44px]">Master Leads</TabsTrigger>}
-              {canAdmin && <TabsTrigger value="segments" className="min-h-[44px]">Segments</TabsTrigger>}
-              <TabsTrigger value="performance" className="min-h-[44px]">Performance</TabsTrigger>
+            <ContextualTabsPortal>
+              <TabsList className={contextualTabListSidebarClassName()}>
+                <TabsTrigger value="my-calls" className={contextualTabTriggerSidebarClassName()}>
+                  My Call List
+                </TabsTrigger>
+                {canAdmin && (
+                  <TabsTrigger value="master-leads" className={contextualTabTriggerSidebarClassName()}>
+                    Master Leads
+                  </TabsTrigger>
+                )}
+                {canAdmin && (
+                  <TabsTrigger value="segments" className={contextualTabTriggerSidebarClassName()}>
+                    Segments
+                  </TabsTrigger>
+                )}
+                <TabsTrigger value="performance" className={contextualTabTriggerSidebarClassName()}>
+                  Performance
+                </TabsTrigger>
+              </TabsList>
+            </ContextualTabsPortal>
+            <TabsList className={contextualTabListClassName("md:hidden")}>
+              <TabsTrigger value="my-calls" className={contextualTabTriggerClassName()}>
+                My Call List
+              </TabsTrigger>
+              {canAdmin && (
+                <TabsTrigger value="master-leads" className={contextualTabTriggerClassName()}>
+                  Master Leads
+                </TabsTrigger>
+              )}
+              {canAdmin && (
+                <TabsTrigger value="segments" className={contextualTabTriggerClassName()}>
+                  Segments
+                </TabsTrigger>
+              )}
+              <TabsTrigger value="performance" className={contextualTabTriggerClassName()}>
+                Performance
+              </TabsTrigger>
             </TabsList>
-            <TabsContent value="my-calls"><MyCallList /></TabsContent>
-            {canAdmin && <TabsContent value="master-leads"><MasterLeadsGrid /></TabsContent>}
-            {canAdmin && <TabsContent value="segments"><SegmentsTab /></TabsContent>}
-            <TabsContent value="performance"><SetterPerformanceTab /></TabsContent>
+            <div className="min-w-0 flex-1 mt-4 md:mt-6">
+            <TabsContent value="my-calls" className="mt-0">
+              <MyCallList />
+            </TabsContent>
+            {canAdmin && (
+              <TabsContent value="master-leads" className="mt-0">
+                <MasterLeadsGrid />
+              </TabsContent>
+            )}
+            {canAdmin && (
+              <TabsContent value="segments" className="mt-0">
+                <SegmentsTab />
+              </TabsContent>
+            )}
+            <TabsContent value="performance" className="mt-0">
+              <SetterPerformanceTab />
+            </TabsContent>
+            </div>
           </Tabs>
         </div>
       </PageWrapper>

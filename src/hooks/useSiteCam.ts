@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { jobFileNameFromSiteCamCaption } from "@/hooks/useDocuments";
 
 export function captionFromFileName(fileName: string): string {
   const base = fileName.replace(/^.*[/\\]/, "").trim();
@@ -196,6 +197,8 @@ export function useUploadSiteCamMedia() {
       tags = [],
       caption,
       folderId,
+      alsoUploadToJobFiles = false,
+      copyToJobFiles,
     }: {
       jobId: string;
       file: File;
@@ -203,6 +206,14 @@ export function useUploadSiteCamMedia() {
       tags?: string[];
       caption?: string;
       folderId?: string | null;
+      alsoUploadToJobFiles?: boolean;
+      copyToJobFiles?: (input: {
+        jobId: string;
+        file: File;
+        uploadedBy?: string;
+        sitecamMediaId: string;
+        displayFileName: string;
+      }) => Promise<void>;
     }) => {
       const ext = file.name.split(".").pop() || "jpg";
       const path = `${jobId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
@@ -229,7 +240,22 @@ export function useUploadSiteCamMedia() {
         .select()
         .single();
       if (error) throw error;
-      return data;
+      let jobFilesCopyError: string | null = null;
+      if (alsoUploadToJobFiles && type === "photo" && copyToJobFiles) {
+        try {
+          await copyToJobFiles({
+            jobId,
+            file,
+            uploadedBy: user?.id,
+            sitecamMediaId: data.id,
+            displayFileName: jobFileNameFromSiteCamCaption(resolvedCaption),
+          });
+        } catch (copyErr) {
+          jobFilesCopyError =
+            copyErr instanceof Error ? copyErr.message : "Photo saved to SiteCam but Job Files copy failed.";
+        }
+      }
+      return { ...data, jobFilesCopyError };
     },
     onSuccess: (data: any) => {
       qc.invalidateQueries({ queryKey: ["sitecam-media", data.job_id] });
@@ -243,29 +269,53 @@ export function useUpdateSiteCamMedia() {
   return useMutation({
     mutationFn: async ({
       id,
+      previousJobId: _unusedPreviousJobId,
       ...updates
     }: {
       id: string;
+      /** When reassigning media, pass the row’s job_id before update so both job galleries refetch. */
+      previousJobId?: string;
       tags?: string[];
       caption?: string | null;
       folder_id?: string | null;
+      /** Changing job clears folder_id in the same update (DB trigger: folder must match job). */
+      job_id?: string;
       annotations?: any;
       annotated_path?: string;
       is_public?: boolean;
       comments?: any[];
     }) => {
+      void _unusedPreviousJobId;
+      const captionTouched = Object.prototype.hasOwnProperty.call(updates, "caption");
+      const { job_id, ...rest } = updates;
+      const patch =
+        job_id !== undefined ? { ...rest, job_id, folder_id: null as string | null } : rest;
       const { data, error } = await supabase
         .from("sitecam_media")
-        .update(updates as any)
+        .update(patch as any)
         .eq("id", id)
         .select()
         .single();
       if (error) throw error;
+      if (captionTouched) {
+        const fn = jobFileNameFromSiteCamCaption(data.caption);
+        const { error: docErr } = await supabase
+          .from("documents")
+          .update({ file_name: fn })
+          .eq("sitecam_media_id", id);
+        if (docErr) throw docErr;
+      }
       return data;
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data: any, variables) => {
       qc.invalidateQueries({ queryKey: ["sitecam-media", data.job_id] });
+      if (variables.previousJobId && variables.previousJobId !== data.job_id) {
+        qc.invalidateQueries({ queryKey: ["sitecam-media", variables.previousJobId] });
+      }
       qc.invalidateQueries({ queryKey: ["sitecam-feed"] });
+      if (Object.prototype.hasOwnProperty.call(variables, "caption")) {
+        qc.invalidateQueries({ queryKey: ["documents", data.job_id] });
+      }
     },
   });
 }

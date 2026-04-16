@@ -189,7 +189,7 @@ export function QualificationTab({
   const str = (v: string | undefined) => v ?? "";
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       {/* KPI bar */}
       <Card className="shadow-card border-primary/20">
         <CardHeader className="pb-2">
@@ -566,7 +566,7 @@ export function QualificationTab({
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          <div className="min-w-0 overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>

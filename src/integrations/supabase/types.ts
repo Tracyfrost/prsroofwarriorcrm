@@ -52,51 +52,76 @@ export type Database = {
       }
       appointments: {
         Row: {
+          appointment_status: string
           assignee_id: string | null
+          assigned_manager_id: string | null
+          assigned_rep_id: string | null
           conflict_flag: boolean | null
           created_at: string
+          created_by: string | null
+          customer_id: string | null
           date_time: string
           duration_minutes: number | null
           external_id: string | null
           id: string
-          job_id: string
+          job_id: string | null
           notes: string | null
+          notification_settings: Json
           outcome: string | null
           timezone: string | null
           title: string | null
           updated_at: string
         }
         Insert: {
+          appointment_status?: string
           assignee_id?: string | null
+          assigned_manager_id?: string | null
+          assigned_rep_id?: string | null
           conflict_flag?: boolean | null
           created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
           date_time: string
           duration_minutes?: number | null
           external_id?: string | null
           id?: string
-          job_id: string
+          job_id?: string | null
           notes?: string | null
+          notification_settings?: Json
           outcome?: string | null
           timezone?: string | null
           title?: string | null
           updated_at?: string
         }
         Update: {
+          appointment_status?: string
           assignee_id?: string | null
+          assigned_manager_id?: string | null
+          assigned_rep_id?: string | null
           conflict_flag?: boolean | null
           created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
           date_time?: string
           duration_minutes?: number | null
           external_id?: string | null
           id?: string
-          job_id?: string
+          job_id?: string | null
           notes?: string | null
+          notification_settings?: Json
           outcome?: string | null
           timezone?: string | null
           title?: string | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "appointments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "appointments_job_id_fkey"
             columns: ["job_id"]
@@ -331,8 +356,10 @@ export type Database = {
           file_name: string
           file_path: string
           file_size: number | null
+          folder_id: string | null
           id: string
           job_id: string
+          sitecam_media_id: string | null
           type: Database["public"]["Enums"]["doc_type"]
           updated_at: string
           uploaded_by: string | null
@@ -343,8 +370,10 @@ export type Database = {
           file_name?: string
           file_path: string
           file_size?: number | null
+          folder_id?: string | null
           id?: string
           job_id: string
+          sitecam_media_id?: string | null
           type?: Database["public"]["Enums"]["doc_type"]
           updated_at?: string
           uploaded_by?: string | null
@@ -355,8 +384,10 @@ export type Database = {
           file_name?: string
           file_path?: string
           file_size?: number | null
+          folder_id?: string | null
           id?: string
           job_id?: string
+          sitecam_media_id?: string | null
           type?: Database["public"]["Enums"]["doc_type"]
           updated_at?: string
           uploaded_by?: string | null
@@ -364,10 +395,24 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "documents_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "job_document_folders"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "documents_job_id_fkey"
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_sitecam_media_id_fkey"
+            columns: ["sitecam_media_id"]
+            isOneToOne: false
+            referencedRelation: "sitecam_media"
             referencedColumns: ["id"]
           },
         ]
@@ -696,6 +741,51 @@ export type Database = {
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_document_folders: {
+        Row: {
+          created_at: string
+          id: string
+          job_id: string
+          name: string
+          parent_id: string | null
+          scope: Database["public"]["Enums"]["job_document_folder_scope"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          job_id: string
+          name: string
+          parent_id?: string | null
+          scope: Database["public"]["Enums"]["job_document_folder_scope"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          job_id?: string
+          name?: string
+          parent_id?: string | null
+          scope?: Database["public"]["Enums"]["job_document_folder_scope"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_document_folders_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_document_folders_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "job_document_folders"
             referencedColumns: ["id"]
           },
         ]
@@ -2259,6 +2349,7 @@ export type Database = {
       commission_status: "earned" | "paid"
       customer_type: "residential" | "commercial"
       doc_type: "contract" | "invoice" | "photo" | "other" | "measurements"
+      job_document_folder_scope: "photos" | "documents"
       lead_assignment_status: "assigned" | "converted" | "dead" | "reallocated"
       lead_source:
         | "self_gen"
@@ -2433,6 +2524,7 @@ export const Constants = {
       commission_status: ["earned", "paid"],
       customer_type: ["residential", "commercial"],
       doc_type: ["contract", "invoice", "photo", "other", "measurements"],
+      job_document_folder_scope: ["photos", "documents"],
       lead_assignment_status: ["assigned", "converted", "dead", "reallocated"],
       lead_source: [
         "self_gen",

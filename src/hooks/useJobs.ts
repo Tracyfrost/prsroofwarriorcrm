@@ -209,7 +209,7 @@ export function useAllAppointments() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("appointments")
-        .select("*, jobs(id, job_id, customer_id, customers(name))")
+        .select("*, jobs(id, job_id, customer_id, customers(name)), customers(name)")
         .order("date_time", { ascending: true });
       if (error) throw error;
       return data ?? [];
@@ -271,13 +271,25 @@ export function useSetJobArchived() {
   });
 }
 
+export type CreateAppointmentInput = {
+  date_time: string;
+  job_id?: string | null;
+  customer_id?: string | null;
+  assignee_id?: string | null;
+  outcome?: string;
+  title?: string;
+  notes?: string;
+  duration_minutes?: number;
+  notification_settings?: TablesInsert<"appointments">["notification_settings"];
+};
+
 export function useCreateAppointment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (appt: { job_id: string; date_time: string; assignee_id?: string; outcome?: string; title?: string; notes?: string; duration_minutes?: number }) => {
+    mutationFn: async (appt: CreateAppointmentInput) => {
       const { data, error } = await supabase
         .from("appointments")
-        .insert(appt)
+        .insert(appt as TablesInsert<"appointments">)
         .select()
         .single();
       if (error) throw error;
@@ -294,7 +306,21 @@ export function useCreateAppointment() {
 export function useUpdateAppointment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...updates }: { id: string; date_time?: string; assignee_id?: string; outcome?: string; title?: string; notes?: string; duration_minutes?: number }) => {
+    mutationFn: async ({
+      id,
+      ...updates
+    }: {
+      id: string;
+      date_time?: string;
+      assignee_id?: string | null;
+      customer_id?: string | null;
+      job_id?: string | null;
+      outcome?: string;
+      title?: string;
+      notes?: string;
+      duration_minutes?: number;
+      notification_settings?: TablesUpdate<"appointments">["notification_settings"];
+    }) => {
       const { data, error } = await supabase
         .from("appointments")
         .update(updates)

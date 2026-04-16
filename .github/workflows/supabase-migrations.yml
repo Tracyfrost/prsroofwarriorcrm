@@ -1,0 +1,33 @@
+# Apply supabase/migrations to the linked Supabase project.
+# Add repository secrets: SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD
+# (Dashboard → Account → Access Tokens; Project Settings → Database → password)
+
+name: Supabase DB push
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+
+jobs:
+  db-push:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.90.0
+
+      - name: Link and push migrations
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          supabase link --project-ref jpwameqbirjeomwhxfyh \
+            --password "$SUPABASE_DB_PASSWORD" \
+            --yes
+          supabase db push --yes

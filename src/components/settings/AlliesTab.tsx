@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { LeapCustomerImportCard } from "@/components/settings/LeapCustomerImportCard";
 import { useAllies, useCreateAlly, useUpdateAlly, useDeleteAlly, type Ally, type AllyPhone, type AllyEmail, type AllyAddress, type AllyContactInfo } from "@/hooks/useAllies";
 import { useGlobalSettings } from "@/hooks/useCustomizations";
 import { useToast } from "@/hooks/use-toast";
@@ -216,6 +217,8 @@ export function AlliesTab() {
 
   return (
     <>
+      <div className="space-y-4">
+        <LeapCustomerImportCard />
       <Card className="shadow-card">
         <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
           <CardTitle className="text-base flex items-center gap-2"><Swords className="h-4 w-4" /> Allies (Vendors & Subs)</CardTitle>
@@ -329,6 +332,7 @@ export function AlliesTab() {
           )}
         </CardContent>
       </Card>
+      </div>
 
       {/* Add Dialog */}
       <Dialog open={showAdd} onOpenChange={setShowAdd}>

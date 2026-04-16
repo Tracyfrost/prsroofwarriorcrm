@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
@@ -20,15 +20,14 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, DollarSign, MapPin, Phone, Mail, Save, Plus, Brain, Loader2, Hammer, Users, X, Trash2, ChevronDown, ChevronUp, Camera, Archive, ArchiveRestore } from "lucide-react";
+import { ArrowLeft, DollarSign, MapPin, Phone, Mail, Save, Plus, Brain, Loader2, Hammer, Users, X, ChevronDown, ChevronUp, Camera, Archive } from "lucide-react";
 import { AddressLink } from "@/components/AddressLink";
 import { BattleTooltip } from "@/components/BattleTooltip";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { ResponsiveModal } from "@/components/ui/responsive-modal";
 import { Checkbox } from "@/components/ui/checkbox";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { JobAppointmentsBlock } from "@/components/appointments/JobAppointmentsBlock";
 import { ProductionSection } from "@/components/production/ProductionSection";
 import { DualWorkflowStatusBar } from "@/components/job/DualWorkflowStatusBar";
@@ -41,7 +40,15 @@ import { formatSupabaseErr } from "@/hooks/useDocuments";
 import { format } from "date-fns";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { EditJobModal } from "@/components/jobs/EditJobModal";
+import { JobHeaderActionsMenu } from "@/components/jobs/JobHeaderActionsMenu";
 import { resolveJobsBackPath, type JobNavigationState } from "@/lib/jobNavigation";
+import {
+  ContextualTabsPortal,
+  contextualTabListClassName,
+  contextualTabTriggerClassName,
+  jobPageHorizontalPrimaryTabsListClassName,
+  jobPageHorizontalPrimaryTabsTriggerClassName,
+} from "@/components/layout/contextualTabNav";
 
 // Status labels/list from flow_stages (job_status flow)
 
@@ -103,6 +110,12 @@ export default function JobDetail() {
   const [tradesModalOpen, setTradesModalOpen] = useState(false);
   const [selectedTrades, setSelectedTrades] = useState<string[]>([]);
   const [editJobOpen, setEditJobOpen] = useState(false);
+  const [createSubJobOpen, setCreateSubJobOpen] = useState(false);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [jobMainTab, setJobMainTab] = useState("info");
+  const [productionSectionKey, setProductionSectionKey] = useState(0);
+  const [productionInitialSubTab, setProductionInitialSubTab] = useState("overview");
 
   // AI claim prediction
   const [aiPrediction, setAiPrediction] = useState<{ prediction: string; confidence: string; estimated_days: number } | null>(null);
@@ -114,6 +127,20 @@ export default function JobDetail() {
   const { data: subJobsList = [] } = useSubJobs(isMainJob ? job?.id : undefined);
   const navState = (location.state as JobNavigationState | null) ?? null;
   const backToJobsPath = resolveJobsBackPath(navState);
+
+  useEffect(() => {
+    const s = location.state as JobNavigationState | null;
+    if (!s?.openJobFiles || !id) return;
+    setJobMainTab("production");
+    setProductionInitialSubTab("job-files");
+    setProductionSectionKey((k) => k + 1);
+    const { openJobFiles: _removed, ...rest } = s;
+    const nextState = Object.keys(rest).length > 0 ? (rest as JobNavigationState) : null;
+    navigate(
+      { pathname: location.pathname, search: location.search, hash: location.hash },
+      { replace: true, state: nextState },
+    );
+  }, [location.state, location.pathname, location.search, location.hash, id, navigate]);
 
   const handleAiPredict = useCallback(async () => {
     if (!job) return;
@@ -433,159 +460,130 @@ export default function JobDetail() {
                  )}
                </p>
              </div>
-             <div className="flex gap-1.5 items-center flex-wrap">
-               <Button variant="outline" size="sm" onClick={() => setEditJobOpen(true)}>
-                 Edit Job
-               </Button>
-                <TradesBadges trades={job.trade_types ?? []} size="sm" />
-                <BattleTooltip phraseKey="forge_trades">
-                  <Button variant="ghost" size="sm" className="min-h-[44px] sm:min-h-0 h-7 px-2 text-xs" onClick={() => { setTradesModalOpen(true); setSelectedTrades(job.trade_types ?? []); }}>
-                    <Hammer className="mr-1 h-3 w-3" /> Forge Trades
-                  </Button>
-                </BattleTooltip>
-                <ResponsiveModal open={tradesModalOpen} onOpenChange={setTradesModalOpen} title={`Edit Trades — ${job.job_id}`} className="max-w-sm">
-                  <div className="space-y-2 py-2 max-h-64 overflow-y-auto">
-                    {tradeTypes.map(tt => (
-                      <label key={tt.id} className="flex items-center gap-3 px-2 py-2 rounded hover:bg-muted/50 cursor-pointer min-h-[44px]">
-                        <Checkbox
-                          checked={selectedTrades.includes(tt.name)}
-                          onCheckedChange={(checked) => {
-                            setSelectedTrades(prev =>
-                              checked ? [...prev, tt.name] : prev.filter(t => t !== tt.name)
-                            );
-                          }}
-                        />
-                        <span className="text-sm">{tt.name}</span>
-                      </label>
-                    ))}
-                    {tradeTypes.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No trade types configured</p>}
-                  </div>
-                  <Button
-                    size="sm"
-                    className="w-full min-h-[44px] sm:min-h-0 mt-2"
-                    onClick={async () => {
-                      try {
-                        await updateJob.mutateAsync({ id: job.id, trade_types: selectedTrades });
-                        setTradesModalOpen(false);
-                        toast({ title: "Trades Forged — Ledger Updated!" });
-                      } catch (e: any) {
-                        toast({ title: "Error", description: e.message, variant: "destructive" });
-                      }
-                    }}
-                  >
-                    <Save className="mr-1 h-3 w-3" /> Save Trades
-                  </Button>
-                </ResponsiveModal>
-               {isMainJob && (
-                 <CreateJobModal
-                   defaultCustomerId={job.customer_id}
-                   defaultParentJobId={job.id}
-                   trigger={
-                    <Button variant="outline" size="sm"><Plus className="mr-1 h-3 w-3" /> Add Sub Job</Button>
+             <div className="w-full sm:w-auto sm:shrink-0">
+               <JobHeaderActionsMenu
+                 leading={
+                   <div className="hidden md:flex md:flex-wrap md:items-center">
+                     <TradesBadges trades={job.trade_types ?? []} size="sm" />
+                   </div>
+                 }
+                 isMainJob={isMainJob}
+                 isArchived={isArchived}
+                 canEditJob={canEditJob}
+                 canDeleteJob={canDeleteJob}
+                 unarchivePending={setJobArchived.isPending}
+                 onEditJob={() => setEditJobOpen(true)}
+                 onForgeTrades={() => {
+                   setTradesModalOpen(true);
+                   setSelectedTrades(job.trade_types ?? []);
+                 }}
+                 onAddSubJob={() => setCreateSubJobOpen(true)}
+                 onArchive={() => setArchiveDialogOpen(true)}
+                 onUnarchive={async () => {
+                   try {
+                     await setJobArchived.mutateAsync({ jobId: job.id, archived: false });
+                     toast({ title: "Job unarchived" });
+                   } catch (e: any) {
+                     toast({ title: "Error", description: e.message, variant: "destructive" });
                    }
-                 />
-               )}
-               {canEditJob && !isArchived && (
-                 <AlertDialog>
-                   <AlertDialogTrigger asChild>
-                     <Button variant="outline" size="sm">
-                       <Archive className="mr-1 h-3 w-3" /> Archive
-                     </Button>
-                   </AlertDialogTrigger>
-                   <AlertDialogContent>
-                     <AlertDialogHeader>
-                       <AlertDialogTitle>Archive {job.job_id}?</AlertDialogTitle>
-                       <AlertDialogDescription>
-                         This marks the job as archived{isMainJob && subJobsList.length > 0 ? ` (and its ${subJobsList.length} sub-job(s))` : ""}. It stays visible with muted styling and is excluded from aggregate reports. Owners and admins can still permanently delete if needed.
-                       </AlertDialogDescription>
-                     </AlertDialogHeader>
-                     <AlertDialogFooter>
-                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                       <AlertDialogAction
-                         onClick={async () => {
-                           try {
-                             await setJobArchived.mutateAsync({ jobId: job.id, archived: true });
-                             toast({ title: "Job archived" });
-                           } catch (e: any) {
-                             toast({ title: "Error", description: e.message, variant: "destructive" });
-                           }
-                         }}
-                       >
-                         Archive
-                       </AlertDialogAction>
-                     </AlertDialogFooter>
-                   </AlertDialogContent>
-                 </AlertDialog>
-               )}
-               {canEditJob && isArchived && (
-                 <Button
-                   variant="outline"
-                   size="sm"
-                   disabled={setJobArchived.isPending}
+                 }}
+                 onDelete={() => setDeleteDialogOpen(true)}
+               />
+             </div>
+           </div>
+
+           <ResponsiveModal open={tradesModalOpen} onOpenChange={setTradesModalOpen} title={`Edit Trades — ${job.job_id}`} className="max-w-sm">
+             <div className="space-y-2 py-2 max-h-64 overflow-y-auto">
+               {tradeTypes.map(tt => (
+                 <label key={tt.id} className="flex min-h-[44px] cursor-pointer items-center gap-3 rounded px-2 py-2 hover:bg-muted/50 sm:min-h-0">
+                   <Checkbox
+                     checked={selectedTrades.includes(tt.name)}
+                     onCheckedChange={(checked) => {
+                       setSelectedTrades(prev =>
+                         checked ? [...prev, tt.name] : prev.filter(t => t !== tt.name)
+                       );
+                     }}
+                   />
+                   <span className="text-sm">{tt.name}</span>
+                 </label>
+               ))}
+               {tradeTypes.length === 0 && <p className="py-4 text-center text-sm text-muted-foreground">No trade types configured</p>}
+             </div>
+             <Button
+               size="sm"
+               className="mt-2 w-full min-h-[44px] sm:min-h-0"
+               onClick={async () => {
+                 try {
+                   await updateJob.mutateAsync({ id: job.id, trade_types: selectedTrades });
+                   setTradesModalOpen(false);
+                   toast({ title: "Trades Forged — Ledger Updated!" });
+                 } catch (e: any) {
+                   toast({ title: "Error", description: e.message, variant: "destructive" });
+                 }
+               }}
+             >
+               <Save className="mr-1 h-3 w-3" /> Save Trades
+             </Button>
+           </ResponsiveModal>
+
+           <AlertDialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>
+             <AlertDialogContent>
+               <AlertDialogHeader>
+                 <AlertDialogTitle>Archive {job.job_id}?</AlertDialogTitle>
+                 <AlertDialogDescription>
+                   This marks the job as archived{isMainJob && subJobsList.length > 0 ? ` (and its ${subJobsList.length} sub-job(s))` : ""}. It stays visible with muted styling and is excluded from aggregate reports. Owners and admins can still permanently delete if needed.
+                 </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                 <AlertDialogCancel>Cancel</AlertDialogCancel>
+                 <AlertDialogAction
                    onClick={async () => {
                      try {
-                       await setJobArchived.mutateAsync({ jobId: job.id, archived: false });
-                       toast({ title: "Job unarchived" });
+                       await setJobArchived.mutateAsync({ jobId: job.id, archived: true });
+                       setArchiveDialogOpen(false);
+                       toast({ title: "Job archived" });
                      } catch (e: any) {
                        toast({ title: "Error", description: e.message, variant: "destructive" });
                      }
                    }}
                  >
-                   <ArchiveRestore className="mr-1 h-3 w-3" /> Unarchive
-                 </Button>
-               )}
-               {canDeleteJob ? (
-                 <AlertDialog>
-                   <AlertDialogTrigger asChild>
-                     <BattleTooltip phraseKey="delete_job">
-                       <Button variant="destructive" size="sm"><Trash2 className="mr-1 h-3 w-3" /> Delete</Button>
-                     </BattleTooltip>
-                   </AlertDialogTrigger>
-                   <AlertDialogContent>
-                     <AlertDialogHeader>
-                       <AlertDialogTitle>Delete Job {job.job_id}?</AlertDialogTitle>
-                       <AlertDialogDescription>
-                         This will soft-delete this job{isMainJob && subJobsList.length > 0 ? ` and its ${subJobsList.length} sub-job(s)` : ""}. It will no longer appear in listings. This action cannot be easily undone.
-                       </AlertDialogDescription>
-                     </AlertDialogHeader>
-                     <AlertDialogFooter>
-                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                       <AlertDialogAction
-                         className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                         onClick={async () => {
-                           try {
-                             await softDeleteJob.mutateAsync(job.id);
-                             toast({ title: "Job deleted" });
-                             navigate("/jobs");
-                           } catch (e: any) {
-                             toast({ title: "Error", description: e.message, variant: "destructive" });
-                           }
-                         }}
-                       >
-                         Delete
-                       </AlertDialogAction>
-                     </AlertDialogFooter>
-                   </AlertDialogContent>
-                 </AlertDialog>
-               ) : (
-                 <Tooltip>
-                   <TooltipTrigger asChild>
-                     <span className="inline-flex">
-                       <Button variant="destructive" size="sm" disabled className="pointer-events-none opacity-50">
-                         <Trash2 className="mr-1 h-3 w-3" /> Delete
-                       </Button>
-                     </span>
-                   </TooltipTrigger>
-                   <TooltipContent side="bottom" className="max-w-xs">
-                     Only owners and executive admins can delete jobs. Archive the job instead if you need to set it aside from active work.
-                   </TooltipContent>
-                 </Tooltip>
-               )}
-             </div>
-           </div>
+                   Archive
+                 </AlertDialogAction>
+               </AlertDialogFooter>
+             </AlertDialogContent>
+           </AlertDialog>
+
+           <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+             <AlertDialogContent>
+               <AlertDialogHeader>
+                 <AlertDialogTitle>Delete Job {job.job_id}?</AlertDialogTitle>
+                 <AlertDialogDescription>
+                   This will soft-delete this job{isMainJob && subJobsList.length > 0 ? ` and its ${subJobsList.length} sub-job(s)` : ""}. It will no longer appear in listings. This action cannot be easily undone.
+                 </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                 <AlertDialogCancel>Cancel</AlertDialogCancel>
+                 <AlertDialogAction
+                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                   onClick={async () => {
+                     try {
+                       await softDeleteJob.mutateAsync(job.id);
+                       setDeleteDialogOpen(false);
+                       toast({ title: "Job deleted" });
+                       navigate("/jobs");
+                     } catch (e: any) {
+                       toast({ title: "Error", description: e.message, variant: "destructive" });
+                     }
+                   }}
+                 >
+                   Delete
+                 </AlertDialogAction>
+               </AlertDialogFooter>
+             </AlertDialogContent>
+           </AlertDialog>
 
            {/* Dual Workflow Status Bar */}
-           <div className="mt-4">
+           <div className="mt-4 w-full min-w-0">
              <DualWorkflowStatusBar
                allStatuses={jobStatuses}
                branches={branches}
@@ -599,251 +597,234 @@ export default function JobDetail() {
            </div>
          </div>
 
-        {/* Tri-pane on desktop, tabs on mobile */}
-        <div className="hidden lg:grid lg:grid-cols-3 lg:gap-6">
-          <div className="space-y-4">
-            <CustomerInfoCard customer={customer} />
-            <SiteAddressCard
-              siteAddress={siteAddress}
-              editing={editSiteAddr}
-              street={siteStreet} city={siteCity} state={siteState} zip={siteZip}
-              onToggleEdit={() => {
-                setEditSiteAddr(!editSiteAddr);
-                setSiteStreet(siteAddress?.street || "");
-                setSiteCity(siteAddress?.city || "");
-                setSiteState(siteAddress?.state || "");
-                setSiteZip(siteAddress?.zip || "");
-              }}
-              onStreetChange={setSiteStreet} onCityChange={setSiteCity}
-              onStateChange={setSiteState} onZipChange={setSiteZip}
-              onSave={handleSaveSiteAddress}
-              onCopyCustomer={handleCopyCustomerAddress}
-            />
-            <FinancialsCard
-              financials={financials} showEdit={showFinEdit}
-              jobType={jobType}
-              estimateAmount={estimateAmount}
-              editAcv={editAcv} editRcv={editRcv}
-              onToggleEdit={() => { setShowFinEdit(!showFinEdit); setEditAcv(String(financials?.acv ?? 0)); setEditRcv(String(financials?.rcv ?? 0)); }}
-              onAcvChange={setEditAcv} onRcvChange={setEditRcv} onSave={handleSaveFinancials}
-            />
-          </div>
-          <div className="space-y-4">
-            <AssignmentsCard
-              assignments={assignments} profileMap={profileMap} allProfiles={allProfiles}
-              assignUserId={assignUserId} assignRole={assignRole}
-              onUserChange={setAssignUserId} onRoleChange={setAssignRole}
-              onAdd={handleAddAssignment} onRemove={handleRemoveAssignment}
-              isPending={createAssignment.isPending}
-            />
-            <NotesCard
-              notes={job.notes ?? ""} editNotes={editNotes}
-              onEdit={() => setEditNotes(job.notes ?? "")}
-              onChange={setEditNotes} onSave={handleSaveNotes} onCancel={() => setEditNotes(null)}
-            />
-            <JobAppointmentsBlock jobId={job.id} appointments={appointments} />
-          </div>
-          <div className="space-y-4">
-            <CommissionCard
-              jobId={job.id} salesRepId={commRepId}
-              showForm={showCommForm} amount={commAmount} notes={commNotes}
-              onToggleForm={() => setShowCommForm(!showCommForm)}
-              onAmountChange={setCommAmount} onNotesChange={setCommNotes}
-              onAdd={handleAddCommission} isPending={createCommission.isPending}
-            />
-            <Card className="shadow-card">
-              <CardHeader><CardTitle className="text-sm">Timeline</CardTitle></CardHeader>
-              <CardContent>
-                <div className="space-y-2 text-xs text-muted-foreground">
-                  <p>Created: {format(new Date(job.created_at), "MMM d, yyyy h:mm a")}</p>
-                  <p>Updated: {format(new Date(job.updated_at), "MMM d, yyyy h:mm a")}</p>
-                  {dates?.inspection && <p>Inspection: {format(new Date(dates.inspection), "MMM d, yyyy")}</p>}
-                  {dates?.start && <p>Start: {format(new Date(dates.start), "MMM d, yyyy")}</p>}
-                  {dates?.end && <p>End: {format(new Date(dates.end), "MMM d, yyyy")}</p>}
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="shadow-card">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-sm flex items-center gap-2"><Brain className="h-4 w-4" /> AI Claim Prediction</CardTitle>
-                <Button variant="ghost" size="sm" onClick={handleAiPredict} disabled={aiLoading}>
-                  {aiLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Predict"}
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {aiPrediction ? (
-                  <div className="space-y-2 text-sm">
-                    <p className="text-foreground">{aiPrediction.prediction}</p>
-                    <div className="flex gap-3">
-                      <Badge variant="outline">Confidence: {aiPrediction.confidence}</Badge>
-                      <Badge variant="outline">~{aiPrediction.estimated_days} days</Badge>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Click "Predict" to get an AI-powered claim prediction.</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-          {/* Sub Jobs Section for Main Jobs */}
-          {isMainJob && subJobsList.length > 0 && (
-            <div className="lg:col-span-3">
-              <Card className="shadow-card bg-blue-100 dark:bg-blue-900/30">
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle className="text-sm flex items-center gap-2"><Hammer className="h-4 w-4" /> Sub Jobs ({subJobsList.length})</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b bg-muted/30">
-                          <th className="px-4 py-2 text-left font-medium text-muted-foreground">Job ID</th>
-                          <th className="px-4 py-2 text-left font-medium text-muted-foreground">Trades</th>
-                          <th className="px-4 py-2 text-left font-medium text-muted-foreground">Status</th>
-                          <th className="px-4 py-2 text-right font-medium text-muted-foreground">ACV</th>
-                          <th className="px-4 py-2 text-right font-medium text-muted-foreground">RCV</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {subJobsList.map((sub: any) => (
-                          <tr
-                            key={sub.id}
-                            className="border-b cursor-pointer hover:bg-muted/40"
-                            onClick={() => navigate(`/operations/${sub.id}`, { state: navState })}
-                          >
-                            <td className="px-4 py-2 font-mono font-medium text-foreground">{sub.job_id}</td>
-                            <td className="px-4 py-2">
-                              <div className="flex gap-1">{sub.trade_types?.map((t: string) => <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>)}</div>
-                            </td>
-                            <td className="px-4 py-2"><Badge variant="outline" className="text-xs capitalize">{sub.status}</Badge></td>
-                            <td className="px-4 py-2 text-right font-mono">${((sub.financials as any)?.acv ?? 0).toLocaleString()}</td>
-                            <td className="px-4 py-2 text-right font-mono">${((sub.financials as any)?.rcv ?? 0).toLocaleString()}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+        {/* Job sections — primary tabs portaled under header on md+ */}
+        <Tabs value={jobMainTab} onValueChange={setJobMainTab} className="w-full">
+          <TabsList
+            className={contextualTabListClassName(
+              "md:hidden bg-[var(--wc-surface-1)] border-[var(--wc-border)] [&_[data-state=active]]:bg-[var(--wc-ink)] [&_[data-state=active]]:text-white",
+            )}
+          >
+            <TabsTrigger value="info" className={contextualTabTriggerClassName()}>
+              Info
+            </TabsTrigger>
+            <TabsTrigger value="team" className={contextualTabTriggerClassName()}>
+              Team
+            </TabsTrigger>
+            <TabsTrigger value="production" className={contextualTabTriggerClassName()}>
+              Production
+            </TabsTrigger>
+            <TabsTrigger value="sitecam" className={contextualTabTriggerClassName()}>
+              SiteCam
+            </TabsTrigger>
+          </TabsList>
 
-          {/* Aggregated Financials for Main Jobs with Subs */}
-          {isMainJob && subJobsList.length > 0 && (
-            <div className="lg:col-span-3">
-              <Card className="shadow-card bg-green-100 dark:bg-green-900/30">
-                <CardHeader><CardTitle className="text-sm flex items-center gap-2"><DollarSign className="h-4 w-4" /> Aggregated Financials</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Own ACV</p>
-                      <p className="text-lg font-bold">${(financials?.acv ?? 0).toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Subs ACV</p>
-                      <p className="text-lg font-bold">${subJobsList.reduce((s: number, sub: any) => s + ((sub.financials as any)?.acv ?? 0), 0).toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Total ACV</p>
-                      <p className="text-lg font-bold text-accent">${((financials?.acv ?? 0) + subJobsList.reduce((s: number, sub: any) => s + ((sub.financials as any)?.acv ?? 0), 0)).toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Total RCV</p>
-                      <p className="text-lg font-bold text-accent">${((financials?.rcv ?? 0) + subJobsList.reduce((s: number, sub: any) => s + ((sub.financials as any)?.rcv ?? 0), 0)).toLocaleString()}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          <div className="lg:col-span-3">
-            <ProductionSection
-              jobId={job.id}
-              jobDisplayId={(job as any).job_id}
-              milestones={(job as any).production_milestones ?? {}}
-              qualification={((job as any).qualification ?? {}) as Qualification}
-              numberOfSquaresRaw={(job as any).number_of_squares ?? null}
-              squaresEstimated={(job as any).squares_estimated ?? null}
-              squaresActualInstalled={(job as any).squares_actual_installed ?? null}
-              squaresFinal={(job as any).squares_final ?? null}
-              assignments={assignments}
-              profileMap={profileMap}
-              tracking={(job as any).tracking ?? {}}
-              isMainJob={isMainJob}
-              parentClaimNumber={isSubJob ? (job as any).claim_number : null}
-              carrierFromCustomer={customer?.insurance_carrier ?? null}
-            />
-          </div>
-
-          {/* SiteCam */}
-          <div className="lg:col-span-3">
-            <Card className="shadow-card">
-              <CardContent className="pt-6">
-                <h3 className="text-sm font-semibold flex items-center gap-2 mb-4">
-                  <Camera className="h-4 w-4" /> SiteCam
-                </h3>
-                <SiteCamGallery jobId={job.id} />
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* Mobile tabs */}
-        <div className="lg:hidden">
-          <Tabs defaultValue="info">
-            <TabsList className="w-full flex-wrap h-auto gap-1 p-1 overflow-x-auto bg-[var(--wc-surface-1)] border-b border-[var(--wc-border)] rounded-none">
-              <TabsTrigger
-                value="info"
-                className="flex-1 min-h-[48px] text-[11px] sm:text-xs font-semibold tracking-[0.14em] uppercase rounded-md text-[var(--wc-muted)] data-[state=active]:bg-[var(--wc-ink)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-[var(--wc-border)] hover:bg-[var(--wc-surface-2)] hover:text-[var(--wc-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
-              >
+          <ContextualTabsPortal>
+            <TabsList className={jobPageHorizontalPrimaryTabsListClassName()}>
+              <TabsTrigger value="info" className={jobPageHorizontalPrimaryTabsTriggerClassName()}>
                 Info
               </TabsTrigger>
-              <TabsTrigger
-                value="team"
-                className="flex-1 min-h-[48px] text-[11px] sm:text-xs font-semibold tracking-[0.14em] uppercase rounded-md text-[var(--wc-muted)] data-[state=active]:bg-[var(--wc-ink)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-[var(--wc-border)] hover:bg-[var(--wc-surface-2)] hover:text-[var(--wc-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
-              >
+              <TabsTrigger value="team" className={jobPageHorizontalPrimaryTabsTriggerClassName()}>
                 Team
               </TabsTrigger>
-              <TabsTrigger
-                value="production"
-                className="flex-1 min-h-[48px] text-[11px] sm:text-xs font-semibold tracking-[0.14em] uppercase rounded-md text-[var(--wc-muted)] data-[state=active]:bg-[var(--wc-ink)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-[var(--wc-border)] hover:bg-[var(--wc-surface-2)] hover:text-[var(--wc-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
-              >
+              <TabsTrigger value="production" className={jobPageHorizontalPrimaryTabsTriggerClassName()}>
                 Production
               </TabsTrigger>
-              <TabsTrigger
-                value="sitecam"
-                className="flex-1 min-h-[48px] text-[11px] sm:text-xs font-semibold tracking-[0.14em] uppercase rounded-md text-[var(--wc-muted)] data-[state=active]:bg-[var(--wc-ink)] data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-[var(--wc-border)] hover:bg-[var(--wc-surface-2)] hover:text-[var(--wc-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wc-amber)] focus-visible:ring-offset-2"
-              >
+              <TabsTrigger value="sitecam" className={jobPageHorizontalPrimaryTabsTriggerClassName()}>
                 SiteCam
               </TabsTrigger>
             </TabsList>
-            <TabsContent value="info" className="space-y-4 mt-4">
-              <CustomerInfoCard customer={customer} />
-              <SiteAddressCard
-                siteAddress={siteAddress} editing={editSiteAddr}
-                street={siteStreet} city={siteCity} state={siteState} zip={siteZip}
-                onToggleEdit={() => { setEditSiteAddr(!editSiteAddr); setSiteStreet(siteAddress?.street || ""); setSiteCity(siteAddress?.city || ""); setSiteState(siteAddress?.state || ""); setSiteZip(siteAddress?.zip || ""); }}
-                onStreetChange={setSiteStreet} onCityChange={setSiteCity}
-                onStateChange={setSiteState} onZipChange={setSiteZip}
-                onSave={handleSaveSiteAddress} onCopyCustomer={handleCopyCustomerAddress}
-              />
-              <FinancialsCard
-                financials={financials} showEdit={showFinEdit}
-                jobType={jobType}
-                estimateAmount={estimateAmount}
-                editAcv={editAcv} editRcv={editRcv}
-                onToggleEdit={() => { setShowFinEdit(!showFinEdit); setEditAcv(String(financials?.acv ?? 0)); setEditRcv(String(financials?.rcv ?? 0)); }}
-                onAcvChange={setEditAcv} onRcvChange={setEditRcv} onSave={handleSaveFinancials}
-              />
-              <NotesCard
-                notes={job.notes ?? ""} editNotes={editNotes}
-                onEdit={() => setEditNotes(job.notes ?? "")}
-                onChange={setEditNotes} onSave={handleSaveNotes} onCancel={() => setEditNotes(null)}
-              />
-              <JobAppointmentsBlock jobId={job.id} appointments={appointments} />
+          </ContextualTabsPortal>
+
+          <div className="min-w-0 flex-1 mt-4 md:mt-6">
+            <TabsContent value="info" className="mt-0 space-y-4">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
+                <div className="space-y-4">
+                  <CustomerInfoCard customer={customer} />
+                  <SiteAddressCard
+                    siteAddress={siteAddress}
+                    editing={editSiteAddr}
+                    street={siteStreet}
+                    city={siteCity}
+                    state={siteState}
+                    zip={siteZip}
+                    onToggleEdit={() => {
+                      setEditSiteAddr(!editSiteAddr);
+                      setSiteStreet(siteAddress?.street || "");
+                      setSiteCity(siteAddress?.city || "");
+                      setSiteState(siteAddress?.state || "");
+                      setSiteZip(siteAddress?.zip || "");
+                    }}
+                    onStreetChange={setSiteStreet}
+                    onCityChange={setSiteCity}
+                    onStateChange={setSiteState}
+                    onZipChange={setSiteZip}
+                    onSave={handleSaveSiteAddress}
+                    onCopyCustomer={handleCopyCustomerAddress}
+                  />
+                  <FinancialsCard
+                    financials={financials}
+                    showEdit={showFinEdit}
+                    jobType={jobType}
+                    estimateAmount={estimateAmount}
+                    editAcv={editAcv}
+                    editRcv={editRcv}
+                    onToggleEdit={() => {
+                      setShowFinEdit(!showFinEdit);
+                      setEditAcv(String(financials?.acv ?? 0));
+                      setEditRcv(String(financials?.rcv ?? 0));
+                    }}
+                    onAcvChange={setEditAcv}
+                    onRcvChange={setEditRcv}
+                    onSave={handleSaveFinancials}
+                  />
+                </div>
+                <div className="space-y-4">
+                  <NotesCard
+                    notes={job.notes ?? ""}
+                    editNotes={editNotes}
+                    onEdit={() => setEditNotes(job.notes ?? "")}
+                    onChange={setEditNotes}
+                    onSave={handleSaveNotes}
+                    onCancel={() => setEditNotes(null)}
+                  />
+                  <JobAppointmentsBlock jobId={job.id} appointments={appointments} />
+                </div>
+                <div className="space-y-4">
+                  <Card className="shadow-card">
+                    <CardHeader>
+                      <CardTitle className="text-sm">Timeline</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 text-xs text-muted-foreground">
+                        <p>Created: {format(new Date(job.created_at), "MMM d, yyyy h:mm a")}</p>
+                        <p>Updated: {format(new Date(job.updated_at), "MMM d, yyyy h:mm a")}</p>
+                        {dates?.inspection && <p>Inspection: {format(new Date(dates.inspection), "MMM d, yyyy")}</p>}
+                        {dates?.start && <p>Start: {format(new Date(dates.start), "MMM d, yyyy")}</p>}
+                        {dates?.end && <p>End: {format(new Date(dates.end), "MMM d, yyyy")}</p>}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="shadow-card">
+                    <CardHeader className="flex flex-row items-center justify-between">
+                      <CardTitle className="flex items-center gap-2 text-sm">
+                        <Brain className="h-4 w-4" /> AI Claim Prediction
+                      </CardTitle>
+                      <Button variant="ghost" size="sm" onClick={handleAiPredict} disabled={aiLoading}>
+                        {aiLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Predict"}
+                      </Button>
+                    </CardHeader>
+                    <CardContent>
+                      {aiPrediction ? (
+                        <div className="space-y-2 text-sm">
+                          <p className="text-foreground">{aiPrediction.prediction}</p>
+                          <div className="flex gap-3">
+                            <Badge variant="outline">Confidence: {aiPrediction.confidence}</Badge>
+                            <Badge variant="outline">~{aiPrediction.estimated_days} days</Badge>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Click &quot;Predict&quot; to get an AI-powered claim prediction.</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+              {isMainJob && subJobsList.length > 0 && (
+                <Card className="shadow-card bg-blue-100 dark:bg-blue-900/30">
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle className="flex items-center gap-2 text-sm">
+                      <Hammer className="h-4 w-4" /> Sub Jobs ({subJobsList.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b bg-muted/30">
+                            <th className="px-4 py-2 text-left font-medium text-muted-foreground">Job ID</th>
+                            <th className="px-4 py-2 text-left font-medium text-muted-foreground">Trades</th>
+                            <th className="px-4 py-2 text-left font-medium text-muted-foreground">Status</th>
+                            <th className="px-4 py-2 text-right font-medium text-muted-foreground">ACV</th>
+                            <th className="px-4 py-2 text-right font-medium text-muted-foreground">RCV</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {subJobsList.map((sub: any) => (
+                            <tr
+                              key={sub.id}
+                              className="cursor-pointer border-b hover:bg-muted/40"
+                              onClick={() => navigate(`/operations/${sub.id}`, { state: navState })}
+                            >
+                              <td className="px-4 py-2 font-mono font-medium text-foreground">{sub.job_id}</td>
+                              <td className="px-4 py-2">
+                                <div className="flex gap-1">
+                                  {sub.trade_types?.map((t: string) => (
+                                    <Badge key={t} variant="outline" className="text-[10px]">
+                                      {t}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </td>
+                              <td className="px-4 py-2">
+                                <Badge variant="outline" className="text-xs capitalize">
+                                  {sub.status}
+                                </Badge>
+                              </td>
+                              <td className="px-4 py-2 text-right font-mono">${((sub.financials as any)?.acv ?? 0).toLocaleString()}</td>
+                              <td className="px-4 py-2 text-right font-mono">${((sub.financials as any)?.rcv ?? 0).toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+              {isMainJob && subJobsList.length > 0 && (
+                <Card className="shadow-card bg-green-100 dark:bg-green-900/30">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-sm">
+                      <DollarSign className="h-4 w-4" /> Aggregated Financials
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Own ACV</p>
+                        <p className="text-lg font-bold">${(financials?.acv ?? 0).toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Subs ACV</p>
+                        <p className="text-lg font-bold">
+                          ${subJobsList.reduce((s: number, sub: any) => s + ((sub.financials as any)?.acv ?? 0), 0).toLocaleString()}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Total ACV</p>
+                        <p className="text-lg font-bold text-accent">
+                          $
+                          {(
+                            (financials?.acv ?? 0) +
+                            subJobsList.reduce((s: number, sub: any) => s + ((sub.financials as any)?.acv ?? 0), 0)
+                          ).toLocaleString()}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Total RCV</p>
+                        <p className="text-lg font-bold text-accent">
+                          $
+                          {(
+                            (financials?.rcv ?? 0) +
+                            subJobsList.reduce((s: number, sub: any) => s + ((sub.financials as any)?.rcv ?? 0), 0)
+                          ).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
-            <TabsContent value="team" className="space-y-4 mt-4">
+            <TabsContent value="team" className="mt-0 space-y-4">
               <AssignmentsCard
                 assignments={assignments} profileMap={profileMap} allProfiles={allProfiles}
                 assignUserId={assignUserId} assignRole={assignRole}
@@ -859,8 +840,9 @@ export default function JobDetail() {
                 onAdd={handleAddCommission} isPending={createCommission.isPending}
               />
             </TabsContent>
-            <TabsContent value="production" className="mt-4">
-               <ProductionSection
+            <TabsContent value="production" className="mt-0">
+              <ProductionSection
+                key={productionSectionKey}
                 jobId={job.id}
                 jobDisplayId={(job as any).job_id}
                 milestones={(job as any).production_milestones ?? {}}
@@ -875,14 +857,31 @@ export default function JobDetail() {
                 isMainJob={isMainJob}
                 parentClaimNumber={isSubJob ? (job as any).claim_number : null}
                 carrierFromCustomer={customer?.insurance_carrier ?? null}
+                initialSubTab={productionInitialSubTab}
+                onGoToSiteCam={() => setJobMainTab("sitecam")}
               />
             </TabsContent>
-            <TabsContent value="sitecam" className="mt-4">
-              <SiteCamGallery jobId={job.id} />
+            <TabsContent value="sitecam" className="mt-0">
+              <Card className="shadow-card">
+                <CardContent className="pt-6">
+                  <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold">
+                    <Camera className="h-4 w-4" /> SiteCam
+                  </h3>
+                  <SiteCamGallery jobId={job.id} jobPageContext="job-detail" />
+                </CardContent>
+              </Card>
             </TabsContent>
-          </Tabs>
-        </div>
+          </div>
+        </Tabs>
       </div>
+      {isMainJob && (
+        <CreateJobModal
+          defaultCustomerId={job.customer_id}
+          defaultParentJobId={job.id}
+          open={createSubJobOpen}
+          onOpenChange={setCreateSubJobOpen}
+        />
+      )}
       <EditJobModal
         open={editJobOpen}
         onOpenChange={setEditJobOpen}

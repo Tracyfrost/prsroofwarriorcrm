@@ -34,6 +34,7 @@ const DEFAULT_PHRASES: Record<string, string> = {
   nav_lead_arsenal: "Lead packages and distribution",
   nav_call_command: "Call setter and lead lists",
   nav_manager: "Officer / Manager hub",
+  nav_officers_hub: "Officer hub — manager dashboard, arsenal, and lead tools",
   nav_settings: "App and team settings",
   close_sidebar: "Close menu",
   open_menu: "Open menu",

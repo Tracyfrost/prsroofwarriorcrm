@@ -8,6 +8,13 @@ import { ReportBySalesRep } from "@/components/reports/ReportBySalesRep";
 import { ReportSquaresSummary } from "@/components/reports/ReportSquaresSummary";
 import { ReportCustom } from "@/components/reports/ReportCustom";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import {
+  ContextualTabsPortal,
+  contextualTabListClassName,
+  contextualTabListSidebarClassName,
+  contextualTabTriggerClassName,
+  contextualTabTriggerSidebarClassName,
+} from "@/components/layout/contextualTabNav";
 
 type ReportTab = "dashboard" | "by-rep" | "squares" | "custom";
 
@@ -27,34 +34,79 @@ export default function Reports() {
           </p>
         </div>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as ReportTab)} className="w-full">
-          <TabsList className="w-full flex-wrap h-auto gap-1 p-1 bg-[var(--wc-surface-1)] border border-[var(--wc-border)] rounded-lg mb-6">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as ReportTab)} className="min-w-0 w-full">
+          <ContextualTabsPortal>
+            <TabsList
+              className={contextualTabListSidebarClassName(
+                "border-[var(--wc-border)] bg-[var(--wc-surface-1)] [&_[data-state=active]]:bg-[var(--wc-ink)] [&_[data-state=active]]:text-white",
+              )}
+            >
+              <TabsTrigger
+                value="dashboard"
+                className={contextualTabTriggerSidebarClassName(
+                  "inline-flex items-center gap-1.5 data-[state=active]:bg-[var(--wc-ink)] data-[state=active]:text-white",
+                )}
+              >
+                <BarChart3 className="h-3.5 w-3.5 shrink-0" /> Dashboard
+              </TabsTrigger>
+              <TabsTrigger
+                value="by-rep"
+                className={contextualTabTriggerSidebarClassName(
+                  "inline-flex items-center gap-1.5 data-[state=active]:bg-[var(--wc-ink)] data-[state=active]:text-white",
+                )}
+              >
+                <Users className="h-3.5 w-3.5 shrink-0" /> By Sales Rep
+              </TabsTrigger>
+              <TabsTrigger
+                value="squares"
+                className={contextualTabTriggerSidebarClassName(
+                  "inline-flex items-center gap-1.5 data-[state=active]:bg-[var(--wc-ink)] data-[state=active]:text-white",
+                )}
+              >
+                <Ruler className="h-3.5 w-3.5 shrink-0" /> Squares Summary
+              </TabsTrigger>
+              <TabsTrigger
+                value="custom"
+                className={contextualTabTriggerSidebarClassName(
+                  "inline-flex items-center gap-1.5 data-[state=active]:bg-[var(--wc-ink)] data-[state=active]:text-white",
+                )}
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" /> Custom
+              </TabsTrigger>
+            </TabsList>
+          </ContextualTabsPortal>
+          <TabsList
+            className={contextualTabListClassName(
+              "md:hidden border-[var(--wc-border)] bg-[var(--wc-surface-1)] [&_[data-state=active]]:bg-[var(--wc-ink)] [&_[data-state=active]]:text-white",
+            )}
+          >
             <TabsTrigger
               value="dashboard"
-              className="data-[state=active]:bg-[var(--wc-ink)] data-[state=active]:text-white"
+              className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 data-[state=active]:bg-[var(--wc-ink)] data-[state=active]:text-white")}
             >
-              <BarChart3 className="mr-1.5 h-3.5 w-3.5" /> Dashboard
+              <BarChart3 className="h-3.5 w-3.5 shrink-0" /> Dashboard
             </TabsTrigger>
             <TabsTrigger
               value="by-rep"
-              className="data-[state=active]:bg-[var(--wc-ink)] data-[state=active]:text-white"
+              className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 data-[state=active]:bg-[var(--wc-ink)] data-[state=active]:text-white")}
             >
-              <Users className="mr-1.5 h-3.5 w-3.5" /> By Sales Rep
+              <Users className="h-3.5 w-3.5 shrink-0" /> By Sales Rep
             </TabsTrigger>
             <TabsTrigger
               value="squares"
-              className="data-[state=active]:bg-[var(--wc-ink)] data-[state=active]:text-white"
+              className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 data-[state=active]:bg-[var(--wc-ink)] data-[state=active]:text-white")}
             >
-              <Ruler className="mr-1.5 h-3.5 w-3.5" /> Squares Summary
+              <Ruler className="h-3.5 w-3.5 shrink-0" /> Squares Summary
             </TabsTrigger>
             <TabsTrigger
               value="custom"
-              className="data-[state=active]:bg-[var(--wc-ink)] data-[state=active]:text-white"
+              className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 data-[state=active]:bg-[var(--wc-ink)] data-[state=active]:text-white")}
             >
-              <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" /> Custom
+              <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" /> Custom
             </TabsTrigger>
           </TabsList>
 
+          <div className="min-w-0 flex-1 mt-4 md:mt-6">
           <TabsContent value="dashboard" className="mt-0">
             <ReportDashboard />
           </TabsContent>
@@ -67,6 +119,7 @@ export default function Reports() {
           <TabsContent value="custom" className="mt-0">
             <ReportCustom />
           </TabsContent>
+          </div>
         </Tabs>
       </PageWrapper>
     </AppLayout>

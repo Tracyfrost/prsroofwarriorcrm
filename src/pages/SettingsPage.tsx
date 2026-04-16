@@ -39,6 +39,13 @@ import { BrandingTab } from "@/components/settings/BrandingTab";
 import { AlliesTab } from "@/components/settings/AlliesTab";
 import { ExpenseTypesTab } from "@/components/settings/ExpenseTypesTab";
 import { DataForgeTab } from "@/components/settings/DataForgeTab";
+import {
+  ContextualTabsPortal,
+  contextualTabListClassName,
+  contextualTabListSidebarClassName,
+  contextualTabTriggerClassName,
+  contextualTabTriggerSidebarClassName,
+} from "@/components/layout/contextualTabNav";
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -159,21 +166,104 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         ) : (
-          <Tabs defaultValue="users">
-            <TabsList className="w-full flex-wrap h-auto gap-1 p-1 overflow-x-auto">
-              <TabsTrigger value="users" className="min-h-[44px] sm:min-h-0 text-xs sm:text-sm">Users & Hierarchy</TabsTrigger>
-              <TabsTrigger value="production" className="min-h-[44px] sm:min-h-0 text-xs sm:text-sm">Production Trades</TabsTrigger>
-              <TabsTrigger value="customizations" className="min-h-[44px] sm:min-h-0 text-xs sm:text-sm"><Sliders className="mr-1.5 h-3.5 w-3.5" />Customizations</TabsTrigger>
-              <TabsTrigger value="integrations" className="min-h-[44px] sm:min-h-0 text-xs sm:text-sm"><Calendar className="mr-1.5 h-3.5 w-3.5" />Integrations</TabsTrigger>
-              <TabsTrigger value="globals" className="min-h-[44px] sm:min-h-0 text-xs sm:text-sm"><Settings2 className="mr-1.5 h-3.5 w-3.5" />Global</TabsTrigger>
-              <TabsTrigger value="billing" className="min-h-[44px] sm:min-h-0 text-xs sm:text-sm"><CreditCard className="mr-1.5 h-3.5 w-3.5" />Billing</TabsTrigger>
-              <TabsTrigger value="branding" className="min-h-[44px] sm:min-h-0 text-xs sm:text-sm"><Shield className="mr-1.5 h-3.5 w-3.5" />Branding</TabsTrigger>
-              <TabsTrigger value="allies" className="min-h-[44px] sm:min-h-0 text-xs sm:text-sm"><Swords className="mr-1.5 h-3.5 w-3.5" />Allies</TabsTrigger>
-              <TabsTrigger value="expense_types" className="min-h-[44px] sm:min-h-0 text-xs sm:text-sm"><Receipt className="mr-1.5 h-3.5 w-3.5" />Expenses</TabsTrigger>
-              <TabsTrigger value="data_forge" className="min-h-[44px] sm:min-h-0 text-xs sm:text-sm"><FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />Data Forge</TabsTrigger>
+          <Tabs defaultValue="users" className="min-w-0 w-full">
+            <ContextualTabsPortal>
+              <TabsList className={contextualTabListSidebarClassName()}>
+                <TabsTrigger value="users" className={contextualTabTriggerSidebarClassName("text-xs sm:text-sm")}>
+                  Users & Hierarchy
+                </TabsTrigger>
+                <TabsTrigger value="production" className={contextualTabTriggerSidebarClassName("text-xs sm:text-sm")}>
+                  Production Trades
+                </TabsTrigger>
+                <TabsTrigger
+                  value="customizations"
+                  className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}
+                >
+                  <Sliders className="h-3.5 w-3.5 shrink-0" />
+                  Customizations
+                </TabsTrigger>
+                <TabsTrigger
+                  value="integrations"
+                  className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}
+                >
+                  <Calendar className="h-3.5 w-3.5 shrink-0" />
+                  Integrations
+                </TabsTrigger>
+                <TabsTrigger value="globals" className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
+                  <Settings2 className="h-3.5 w-3.5 shrink-0" />
+                  Global
+                </TabsTrigger>
+                <TabsTrigger value="billing" className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
+                  <CreditCard className="h-3.5 w-3.5 shrink-0" />
+                  Billing
+                </TabsTrigger>
+                <TabsTrigger value="branding" className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
+                  <Shield className="h-3.5 w-3.5 shrink-0" />
+                  Branding
+                </TabsTrigger>
+                <TabsTrigger value="allies" className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
+                  <Swords className="h-3.5 w-3.5 shrink-0" />
+                  Allies
+                </TabsTrigger>
+                <TabsTrigger
+                  value="expense_types"
+                  className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}
+                >
+                  <Receipt className="h-3.5 w-3.5 shrink-0" />
+                  Expenses
+                </TabsTrigger>
+                <TabsTrigger
+                  value="data_forge"
+                  className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
+                  Data Forge
+                </TabsTrigger>
+              </TabsList>
+            </ContextualTabsPortal>
+            <TabsList className={contextualTabListClassName("md:hidden")}>
+              <TabsTrigger value="users" className={contextualTabTriggerClassName("text-xs sm:text-sm")}>
+                Users & Hierarchy
+              </TabsTrigger>
+              <TabsTrigger value="production" className={contextualTabTriggerClassName("text-xs sm:text-sm")}>
+                Production Trades
+              </TabsTrigger>
+              <TabsTrigger value="customizations" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
+                <Sliders className="h-3.5 w-3.5 shrink-0" />
+                Customizations
+              </TabsTrigger>
+              <TabsTrigger value="integrations" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
+                <Calendar className="h-3.5 w-3.5 shrink-0" />
+                Integrations
+              </TabsTrigger>
+              <TabsTrigger value="globals" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
+                <Settings2 className="h-3.5 w-3.5 shrink-0" />
+                Global
+              </TabsTrigger>
+              <TabsTrigger value="billing" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
+                <CreditCard className="h-3.5 w-3.5 shrink-0" />
+                Billing
+              </TabsTrigger>
+              <TabsTrigger value="branding" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
+                <Shield className="h-3.5 w-3.5 shrink-0" />
+                Branding
+              </TabsTrigger>
+              <TabsTrigger value="allies" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
+                <Swords className="h-3.5 w-3.5 shrink-0" />
+                Allies
+              </TabsTrigger>
+              <TabsTrigger value="expense_types" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
+                <Receipt className="h-3.5 w-3.5 shrink-0" />
+                Expenses
+              </TabsTrigger>
+              <TabsTrigger value="data_forge" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
+                <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
+                Data Forge
+              </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="users" className="space-y-6 mt-4">
+            <div className="min-w-0 flex-1 mt-4 md:mt-6">
+            <TabsContent value="users" className="mt-0 space-y-6">
               {/* Org Chart */}
               <Card className="shadow-card">
                 <CardHeader>
@@ -194,7 +284,7 @@ export default function SettingsPage() {
               <UserAdminTable users={users} isLoading={isLoading} />
             </TabsContent>
 
-            <TabsContent value="production" className="space-y-6 mt-4">
+            <TabsContent value="production" className="mt-0 space-y-6">
               <Card className="shadow-card">
                 <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle className="text-base flex items-center gap-2">
@@ -341,37 +431,38 @@ export default function SettingsPage() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="customizations">
+            <TabsContent value="customizations" className="mt-0">
               <CustomizationsTab />
             </TabsContent>
 
-            <TabsContent value="integrations">
+            <TabsContent value="integrations" className="mt-0">
               <IntegrationsTab />
             </TabsContent>
 
-            <TabsContent value="globals">
+            <TabsContent value="globals" className="mt-0">
               <GlobalSettingsTab />
             </TabsContent>
 
-            <TabsContent value="billing">
+            <TabsContent value="billing" className="mt-0">
               <BillingTab />
             </TabsContent>
 
-            <TabsContent value="branding">
+            <TabsContent value="branding" className="mt-0">
               <BrandingTab />
             </TabsContent>
 
-            <TabsContent value="allies" className="mt-4">
+            <TabsContent value="allies" className="mt-0">
               <AlliesTab />
             </TabsContent>
 
-            <TabsContent value="expense_types" className="mt-4">
+            <TabsContent value="expense_types" className="mt-0">
               <ExpenseTypesTab />
             </TabsContent>
 
-            <TabsContent value="data_forge" className="mt-4">
+            <TabsContent value="data_forge" className="mt-0">
               <DataForgeTab />
             </TabsContent>
+            </div>
           </Tabs>
         )}
 

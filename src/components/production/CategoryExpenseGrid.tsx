@@ -212,7 +212,7 @@ export function CategoryExpenseGrid({ jobId, title, icon, categories, badge, bad
           </div>
         )}
 
-        <div className="overflow-x-auto">
+        <div className="min-w-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

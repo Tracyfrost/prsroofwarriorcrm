@@ -11,6 +11,13 @@ import { DistributionRulesTab } from "@/components/leads/DistributionRulesTab";
 import { LeadSourcesGrid } from "@/components/leads/LeadSourcesGrid";
 import { AppLayout } from "@/components/AppLayout";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import {
+  ContextualTabsPortal,
+  contextualTabListClassName,
+  contextualTabListSidebarClassName,
+  contextualTabTriggerClassName,
+  contextualTabTriggerSidebarClassName,
+} from "@/components/layout/contextualTabNav";
 
 export default function LeadArsenal() {
   const [tab, setTab] = useState("dashboard");
@@ -47,40 +54,72 @@ export default function LeadArsenal() {
 
         {/* Tabs */}
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="flex flex-wrap gap-1 h-auto bg-muted/40 p-1">
-            <TabsTrigger value="dashboard" className="min-h-[40px] gap-1.5 text-xs sm:text-sm">
-              <Swords className="h-3.5 w-3.5" /> Dashboard
+          <ContextualTabsPortal>
+            <TabsList className={contextualTabListSidebarClassName()}>
+              <TabsTrigger
+                value="dashboard"
+                className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}
+              >
+                <Swords className="h-3.5 w-3.5 shrink-0" /> Dashboard
+              </TabsTrigger>
+              <TabsTrigger
+                value="packages"
+                className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}
+              >
+                <Package className="h-3.5 w-3.5 shrink-0" /> Packages
+              </TabsTrigger>
+              <TabsTrigger
+                value="performance"
+                className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}
+              >
+                <Users className="h-3.5 w-3.5 shrink-0" /> Rep Performance
+              </TabsTrigger>
+              {isOwnerOrAdmin && (
+                <TabsTrigger
+                  value="rules"
+                  className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}
+                >
+                  <Settings2 className="h-3.5 w-3.5 shrink-0" /> Distribution Rules
+                </TabsTrigger>
+              )}
+            </TabsList>
+          </ContextualTabsPortal>
+          <TabsList className={contextualTabListClassName("md:hidden")}>
+            <TabsTrigger value="dashboard" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
+              <Swords className="h-3.5 w-3.5 shrink-0" /> Dashboard
             </TabsTrigger>
-            <TabsTrigger value="packages" className="min-h-[40px] gap-1.5 text-xs sm:text-sm">
-              <Package className="h-3.5 w-3.5" /> Packages
+            <TabsTrigger value="packages" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
+              <Package className="h-3.5 w-3.5 shrink-0" /> Packages
             </TabsTrigger>
-            <TabsTrigger value="performance" className="min-h-[40px] gap-1.5 text-xs sm:text-sm">
-              <Users className="h-3.5 w-3.5" /> Rep Performance
+            <TabsTrigger value="performance" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
+              <Users className="h-3.5 w-3.5 shrink-0" /> Rep Performance
             </TabsTrigger>
             {isOwnerOrAdmin && (
-              <TabsTrigger value="rules" className="min-h-[40px] gap-1.5 text-xs sm:text-sm">
-                <Settings2 className="h-3.5 w-3.5" /> Distribution Rules
+              <TabsTrigger value="rules" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
+                <Settings2 className="h-3.5 w-3.5 shrink-0" /> Distribution Rules
               </TabsTrigger>
             )}
           </TabsList>
 
-          <TabsContent value="dashboard" className="mt-4">
+          <div className="min-w-0 flex-1 mt-4 md:mt-6">
+          <TabsContent value="dashboard" className="mt-0">
             <LeadSourcesGrid />
           </TabsContent>
 
-          <TabsContent value="packages" className="mt-4">
+          <TabsContent value="packages" className="mt-0">
             <LeadPackagesTab />
           </TabsContent>
 
-          <TabsContent value="performance" className="mt-4">
+          <TabsContent value="performance" className="mt-0">
             <RepPerformanceTab />
           </TabsContent>
 
           {isOwnerOrAdmin && (
-            <TabsContent value="rules" className="mt-4">
+            <TabsContent value="rules" className="mt-0">
               <DistributionRulesTab />
             </TabsContent>
           )}
+          </div>
         </Tabs>
       </div>
     </AppLayout>

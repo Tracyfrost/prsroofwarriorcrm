@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useSiteCamMedia,
   useUploadSiteCamMedia,
@@ -51,6 +51,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { useToast } from "@/hooks/use-toast";
+import { useUploadDocument } from "@/hooks/useDocuments";
 import {
   Camera,
   Upload,
@@ -75,9 +76,16 @@ import { AnnotationEditor } from "./AnnotationEditor";
 import { SiteCamCapture } from "./SiteCamCapture";
 import { AiDamageButton } from "./AiDamageButton";
 import { cn } from "@/lib/utils";
+import { openFileViaProxy } from "@/lib/fileProxy";
+import { Switch } from "@/components/ui/switch";
+import { useNavigate, useLocation } from "react-router-dom";
+import type { JobNavigationState } from "@/lib/jobNavigation";
+
+export type SiteCamJobPageContext = "operations" | "job-detail";
 
 interface SiteCamGalleryProps {
   jobId: string;
+  jobPageContext: SiteCamJobPageContext;
 }
 
 const ROOT_VALUE = "__root__";
@@ -116,10 +124,13 @@ function folderBreadcrumbLabel(folderId: string, folders: SiteCamFolder[]): stri
   return parts.join(" / ");
 }
 
-export function SiteCamGallery({ jobId }: SiteCamGalleryProps) {
+export function SiteCamGallery({ jobId, jobPageContext }: SiteCamGalleryProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { data: media = [], isLoading } = useSiteCamMedia(jobId);
   const { data: folders = [] } = useSiteCamFolders(jobId);
   const uploadMedia = useUploadSiteCamMedia();
+  const uploadDocument = useUploadDocument();
   const deleteMedia = useDeleteSiteCamMedia();
   const createFolder = useCreateSiteCamFolder();
   const updateFolder = useUpdateSiteCamFolder();
@@ -137,6 +148,7 @@ export function SiteCamGallery({ jobId }: SiteCamGalleryProps) {
   const [filterTag, setFilterTag] = useState("");
   const [uploading, setUploading] = useState(false);
   const [isFileOver, setIsFileOver] = useState(false);
+  const [alsoUploadToJobFiles, setAlsoUploadToJobFiles] = useState(true);
 
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -148,6 +160,19 @@ export function SiteCamGallery({ jobId }: SiteCamGalleryProps) {
   const [moveMediaOpen, setMoveMediaOpen] = useState(false);
   const [movingMedia, setMovingMedia] = useState<SiteCamMedia | null>(null);
   const [moveTargetFolder, setMoveTargetFolder] = useState<string>(ROOT_VALUE);
+
+  const [renameMediaOpen, setRenameMediaOpen] = useState(false);
+  const [renamingMedia, setRenamingMedia] = useState<SiteCamMedia | null>(null);
+  const [renameMediaValue, setRenameMediaValue] = useState("");
+
+  const openJobFiles = useCallback(() => {
+    const prev = (location.state ?? {}) as JobNavigationState;
+    const pathname = jobPageContext === "operations" ? `/operations/${jobId}` : `/jobs/${jobId}`;
+    navigate(
+      { pathname, search: location.search, hash: location.hash },
+      { state: { ...prev, openJobFiles: true } },
+    );
+  }, [jobPageContext, jobId, location.hash, location.search, location.state, navigate]);
 
   const folderPath = useMemo(
     () => folderPathSegments(currentFolderId, folders),
@@ -176,23 +201,58 @@ export function SiteCamGallery({ jobId }: SiteCamGalleryProps) {
       const targetFolder = folderIdOverride !== undefined ? folderIdOverride : currentFolderId;
       setUploading(true);
       try {
+        let copiedCount = 0;
+        let copyFailedCount = 0;
         for (const file of Array.from(files)) {
           const type = file.type.startsWith("video/") ? "video" : "photo";
-          await uploadMedia.mutateAsync({
+          const result = await uploadMedia.mutateAsync({
             jobId,
             file,
             type: type as "photo" | "video",
             folderId: targetFolder ?? null,
+            alsoUploadToJobFiles,
+            copyToJobFiles: ({
+              jobId: targetJobId,
+              file: uploadFile,
+              uploadedBy,
+              sitecamMediaId,
+              displayFileName,
+            }) =>
+              uploadDocument.mutateAsync({
+                file: uploadFile,
+                jobId: targetJobId,
+                type: "photo",
+                uploadedBy,
+                sitecamMediaId,
+                displayFileName,
+              }),
           });
+          if (alsoUploadToJobFiles && type === "photo") {
+            if (result.jobFilesCopyError) copyFailedCount += 1;
+            else copiedCount += 1;
+          }
         }
-        toast({ title: `${files.length} file(s) uploaded` });
+        if (alsoUploadToJobFiles && copyFailedCount > 0) {
+          toast({
+            title: "SiteCam upload completed",
+            description: `${files.length} file(s) saved to SiteCam. ${copiedCount} photo(s) copied to Job Files; ${copyFailedCount} failed.`,
+            variant: "destructive",
+          });
+        } else if (alsoUploadToJobFiles && copiedCount > 0) {
+          toast({
+            title: `${files.length} file(s) uploaded`,
+            description: `${copiedCount} photo(s) also copied to Job Files.`,
+          });
+        } else {
+          toast({ title: `${files.length} file(s) uploaded` });
+        }
       } catch (e: any) {
         toast({ title: "Upload failed", description: e.message, variant: "destructive" });
       } finally {
         setUploading(false);
       }
     },
-    [jobId, uploadMedia, toast, currentFolderId],
+    [jobId, uploadMedia, toast, currentFolderId, alsoUploadToJobFiles, uploadDocument],
   );
 
   const handleCapturedPhoto = useCallback(
@@ -201,20 +261,46 @@ export function SiteCamGallery({ jobId }: SiteCamGalleryProps) {
       setUploading(true);
       try {
         const file = new File([blob], `capture-${Date.now()}.jpg`, { type: "image/jpeg" });
-        await uploadMedia.mutateAsync({
+        const result = await uploadMedia.mutateAsync({
           jobId,
           file,
           type: "photo",
           folderId: currentFolderId ?? null,
+          alsoUploadToJobFiles,
+          copyToJobFiles: ({
+            jobId: targetJobId,
+            file: uploadFile,
+            uploadedBy,
+            sitecamMediaId,
+            displayFileName,
+          }) =>
+            uploadDocument.mutateAsync({
+              file: uploadFile,
+              jobId: targetJobId,
+              type: "photo",
+              uploadedBy,
+              sitecamMediaId,
+              displayFileName,
+            }),
         });
-        toast({ title: "Photo captured & uploaded" });
+        if (result.jobFilesCopyError) {
+          toast({
+            title: "Photo uploaded to SiteCam",
+            description: "Job Files copy failed for this photo.",
+            variant: "destructive",
+          });
+        } else if (alsoUploadToJobFiles) {
+          toast({ title: "Photo captured & uploaded", description: "Also copied to Job Files." });
+        } else {
+          toast({ title: "Photo captured & uploaded" });
+        }
       } catch (e: any) {
         toast({ title: "Upload failed", description: e.message, variant: "destructive" });
       } finally {
         setUploading(false);
       }
     },
-    [jobId, uploadMedia, toast, currentFolderId],
+    [jobId, uploadMedia, toast, currentFolderId, alsoUploadToJobFiles, uploadDocument],
   );
 
   const handleDelete = useCallback(
@@ -285,6 +371,30 @@ export function SiteCamGallery({ jobId }: SiteCamGalleryProps) {
     setMovingMedia(m);
     setMoveTargetFolder(m.folder_id ?? ROOT_VALUE);
     setMoveMediaOpen(true);
+  };
+
+  const openRenameMedia = (m: SiteCamMedia) => {
+    setRenamingMedia(m);
+    setRenameMediaValue(m.caption || "");
+    setRenameMediaOpen(true);
+  };
+
+  const onSaveRenameMedia = async () => {
+    if (!renamingMedia) return;
+    const v = renameMediaValue.trim();
+    try {
+      await updateSiteCamMedia.mutateAsync({ id: renamingMedia.id, caption: v || null });
+      setRenameMediaOpen(false);
+      setRenamingMedia(null);
+      toast({ title: "Title updated" });
+    } catch (e: any) {
+      toast({ title: "Could not save", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleAnnotateFromMenu = (m: SiteCamMedia) => {
+    setAnnotatingMedia(m);
+    setShowAnnotationEditor(true);
   };
 
   const performMediaMove = useCallback(
@@ -426,6 +536,12 @@ export function SiteCamGallery({ jobId }: SiteCamGalleryProps) {
             className="hidden"
             onChange={(e) => handleFileUpload(e.target.files)}
           />
+          <div className="flex items-center gap-2 pl-2">
+            <Switch id="sitecam-copy-job-files" checked={alsoUploadToJobFiles} onCheckedChange={setAlsoUploadToJobFiles} />
+            <Label htmlFor="sitecam-copy-job-files" className="text-xs text-muted-foreground">
+              Also upload to Job Files (Photos)
+            </Label>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {allTags.length > 0 && (
@@ -514,6 +630,9 @@ export function SiteCamGallery({ jobId }: SiteCamGalleryProps) {
                       item={item}
                       onClick={() => setSelectedMedia(item)}
                       onMove={() => openMoveMedia(item)}
+                      onRename={() => openRenameMedia(item)}
+                      onAnnotate={() => handleAnnotateFromMenu(item)}
+                      onOpenJobFiles={openJobFiles}
                       dragType={SITECAM_MEDIA_DRAG_TYPE}
                     />
                   ))}
@@ -527,6 +646,9 @@ export function SiteCamGallery({ jobId }: SiteCamGalleryProps) {
                       folders={folders}
                       onClick={() => setSelectedMedia(item)}
                       onMove={() => openMoveMedia(item)}
+                      onRename={() => openRenameMedia(item)}
+                      onAnnotate={() => handleAnnotateFromMenu(item)}
+                      onOpenJobFiles={openJobFiles}
                       dragType={SITECAM_MEDIA_DRAG_TYPE}
                     />
                   ))}
@@ -630,8 +752,33 @@ export function SiteCamGallery({ jobId }: SiteCamGalleryProps) {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={renameMediaOpen} onOpenChange={setRenameMediaOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="sitecam-rename-media">Title / file name</Label>
+            <Input
+              id="sitecam-rename-media"
+              value={renameMediaValue}
+              onChange={(e) => setRenameMediaValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && void onSaveRenameMedia()}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameMediaOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void onSaveRenameMedia()} disabled={updateSiteCamMedia.isPending}>
+              {updateSiteCamMedia.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!selectedMedia} onOpenChange={() => setSelectedMedia(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-auto">
+        <DialogContent className="!flex max-h-[90vh] w-full max-w-3xl flex-col gap-4 overflow-y-auto overscroll-contain p-6">
           {selectedMedia && (
             <MediaDetail
               media={selectedMedia}
@@ -817,15 +964,22 @@ function MediaCard({
   item,
   onClick,
   onMove,
+  onRename,
+  onAnnotate,
+  onOpenJobFiles,
   dragType,
 }: {
   item: SiteCamMedia;
   onClick: () => void;
   onMove: () => void;
+  onRename: () => void;
+  onAnnotate: () => void;
+  onOpenJobFiles: () => void;
   dragType: string;
 }) {
   const url = useMediaUrl(item.annotated_path || item.original_path);
   const title = item.caption?.trim() || "Untitled";
+  const hasCustomTitle = Boolean(item.caption?.trim());
   return (
     <div className="group relative aspect-square rounded-lg overflow-hidden bg-muted border border-border hover:border-primary/50 transition-all">
       <button type="button" onClick={onClick} className="absolute inset-0 z-0 cursor-pointer" aria-label={`Open ${title}`} />
@@ -842,14 +996,19 @@ function MediaCard({
           <Video className="h-8 w-8 text-muted-foreground" />
         </div>
       )}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+      <div
+        className={cn(
+          "absolute inset-0 bg-gradient-to-t from-black/60 to-transparent transition-opacity pointer-events-none",
+          hasCustomTitle ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+        )}
+      >
         <div className="absolute bottom-2 left-2 right-2">
           <p className="text-white text-xs truncate">{title}</p>
           <p className="text-white/70 text-[10px]">{format(new Date(item.uploaded_at), "MMM d")}</p>
         </div>
       </div>
       {item.annotated_path && (
-        <div className="absolute top-1.5 right-[5.5rem] pointer-events-none">
+        <div className="absolute top-1.5 right-[10rem] pointer-events-none sm:right-[10.5rem]">
           <Badge variant="secondary" className="text-[9px] px-1 py-0">
             <Pencil className="h-2.5 w-2.5" />
           </Badge>
@@ -862,37 +1021,74 @@ function MediaCard({
           </Badge>
         </div>
       )}
-      <div
-        role="button"
-        tabIndex={0}
-        aria-label="Drag to move to folder"
-        draggable
-        className="absolute top-1.5 right-10 z-10 flex h-8 w-8 cursor-grab active:cursor-grabbing items-center justify-center rounded-md bg-secondary/90 text-muted-foreground shadow-sm hover:bg-secondary"
-        onDragStart={(e) => {
-          e.stopPropagation();
-          e.dataTransfer.setData(dragType, item.id);
-          e.dataTransfer.effectAllowed = "move";
-        }}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
-      >
-        <GripVertical className="h-4 w-4" />
+      <div className="absolute top-1.5 right-1.5 z-10 flex items-center gap-1">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="h-7 shrink-0 px-1.5 text-[10px] font-medium shadow-sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenJobFiles();
+          }}
+        >
+          Job Files
+        </Button>
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label="Drag to move to folder"
+          draggable
+          className="flex h-8 w-8 cursor-grab active:cursor-grabbing items-center justify-center rounded-md bg-secondary/90 text-muted-foreground shadow-sm hover:bg-secondary"
+          onDragStart={(e) => {
+            e.stopPropagation();
+            e.dataTransfer.setData(dragType, item.id);
+            e.dataTransfer.effectAllowed = "move";
+          }}
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <GripVertical className="h-4 w-4" />
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="secondary" size="icon" className="h-8 w-8 shadow-sm" onClick={(e) => e.stopPropagation()}>
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onRename();
+              }}
+            >
+              <Pencil className="mr-2 h-3.5 w-3.5" />
+              Rename
+            </DropdownMenuItem>
+            {item.type === "photo" && (
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAnnotate();
+                }}
+              >
+                <Pencil className="mr-2 h-3.5 w-3.5" />
+                Annotate
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={onMove}>Move to folder…</DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenJobFiles();
+              }}
+            >
+              Job Files
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="secondary"
-            size="icon"
-            className="absolute top-1.5 right-1.5 h-8 w-8 z-10"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <MoreVertical className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-          <DropdownMenuItem onClick={onMove}>Move to folder…</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
     </div>
   );
 }
@@ -902,12 +1098,18 @@ function TimelineRow({
   folders,
   onClick,
   onMove,
+  onRename,
+  onAnnotate,
+  onOpenJobFiles,
   dragType,
 }: {
   item: SiteCamMedia;
   folders: SiteCamFolder[];
   onClick: () => void;
   onMove: () => void;
+  onRename: () => void;
+  onAnnotate: () => void;
+  onOpenJobFiles: () => void;
   dragType: string;
 }) {
   const url = useMediaUrl(item.annotated_path || item.original_path);
@@ -963,16 +1165,58 @@ function TimelineRow({
       >
         <GripVertical className="h-4 w-4" />
       </div>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="shrink-0 h-9 w-9">
-            <MoreVertical className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={onMove}>Move to folder…</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="flex shrink-0 items-center gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-9 px-2 text-xs text-primary"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenJobFiles();
+          }}
+        >
+          Job Files
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="shrink-0 h-9 w-9">
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onRename();
+              }}
+            >
+              <Pencil className="mr-2 h-3.5 w-3.5" />
+              Rename
+            </DropdownMenuItem>
+            {item.type === "photo" && (
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAnnotate();
+                }}
+              >
+                <Pencil className="mr-2 h-3.5 w-3.5" />
+                Annotate
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={onMove}>Move to folder…</DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenJobFiles();
+              }}
+            >
+              Job Files
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   );
 }
@@ -988,24 +1232,6 @@ function MediaDetail({
 }) {
   const imgUrl = useMediaUrl(media.annotated_path || media.original_path);
   const origUrl = useMediaUrl(media.original_path);
-  const updateMedia = useUpdateSiteCamMedia();
-  const { toast } = useToast();
-  const [titleDraft, setTitleDraft] = useState(media.caption || "");
-
-  useEffect(() => {
-    setTitleDraft(media.caption || "");
-  }, [media.id, media.caption]);
-
-  const saveTitle = async () => {
-    const v = titleDraft.trim();
-    try {
-      await updateMedia.mutateAsync({ id: media.id, caption: v || null });
-      toast({ title: "Title updated" });
-    } catch (e: any) {
-      toast({ title: "Could not save", description: e.message, variant: "destructive" });
-    }
-  };
-
   const displayTitle = media.caption?.trim() || "Untitled";
 
   return (
@@ -1017,31 +1243,19 @@ function MediaDetail({
         </DialogTitle>
       </DialogHeader>
       <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="sitecam-media-title">Title / file name</Label>
-          <div className="flex gap-2 flex-wrap">
-            <Input
-              id="sitecam-media-title"
-              value={titleDraft}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              className="max-w-md"
-            />
-            <Button type="button" variant="secondary" size="sm" onClick={() => void saveTitle()} disabled={updateMedia.isPending}>
-              {updateMedia.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save title"}
-            </Button>
-          </div>
-        </div>
-        {media.type === "photo" ? (
-          imgUrl ? (
-            <img src={imgUrl} alt={displayTitle} className="w-full rounded-lg" />
+        <div className="flex max-h-[min(55vh,600px)] w-full items-center justify-center overflow-hidden rounded-lg bg-muted">
+          {media.type === "photo" ? (
+            imgUrl ? (
+              <img src={imgUrl} alt={displayTitle} className="max-h-full max-w-full object-contain" />
+            ) : (
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            )
+          ) : origUrl ? (
+            <video src={origUrl} controls className="max-h-full max-w-full object-contain" />
           ) : (
-            <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-          )
-        ) : origUrl ? (
-          <video src={origUrl} controls className="w-full rounded-lg" />
-        ) : (
-          <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-        )}
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          )}
+        </div>
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex gap-1">
             {media.tags?.map((tag) => (
@@ -1061,13 +1275,15 @@ function MediaDetail({
               <AiDamageButton media={media} />
             </>
           )}
-          {origUrl && (
-            <Button variant="outline" size="sm" asChild>
-              <a href={origUrl} target="_blank" rel="noopener noreferrer">
-                <Eye className="mr-1 h-3.5 w-3.5" /> Original
-              </a>
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              void openFileViaProxy("sitecam", media.original_path).catch(() => {})
+            }
+          >
+            <Eye className="mr-1 h-3.5 w-3.5" /> Original
+          </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="destructive" size="sm">

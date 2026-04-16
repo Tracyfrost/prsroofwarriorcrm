@@ -23,6 +23,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { PasswordInput } from "@/components/ui/password-input";
 import { toast } from "sonner"; // or your toast library
+import { uiToDbRole, type UiRole } from "@/lib/role-utils";
 
 const UI_ROLES = [
   { value: "admin", label: "Admin" },
@@ -48,7 +49,7 @@ export function CreateUserDialog() {
           action: "create-user",
           full_name: fullName.trim(),
           email: email.trim().toLowerCase(),
-          role,
+          role: uiToDbRole(role as UiRole),
           password,
           must_change_password: mustChangePassword,
         },
@@ -61,10 +62,11 @@ export function CreateUserDialog() {
     },
     onSuccess: (data) => {
       toast.success("User created successfully");
-      queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["all-profiles-hierarchy"] });
+      queryClient.invalidateQueries({ queryKey: ["audits-for-user"] });
 
-      // Show one-time temp password
-      showTempPasswordModal(data.temp_password);
+      // Show one-time temp password (Edge Function doesn't echo it back, use form value)
+      showTempPasswordModal(password);
 
       // Reset form
       setFullName("");

@@ -1,16 +1,22 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { PageWrapper } from "@/components/PageWrapper";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
-import { useSiteCamFeed, useMediaUrl, type SiteCamMedia } from "@/hooks/useSiteCam";
+import { useSiteCamFeed, useMediaUrl, useUpdateSiteCamMedia, type SiteCamMedia } from "@/hooks/useSiteCam";
+import { useJobs, type Job } from "@/hooks/useJobs";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Camera, Video, Image as ImageIcon, Search, Tag, Pencil, Loader2 } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Camera, Video, Image as ImageIcon, Search, Pencil, Loader2, Link2 } from "lucide-react";
 import { format } from "date-fns";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AnnotationEditor } from "@/components/sitecam/AnnotationEditor";
+import { AiDamageButton } from "@/components/sitecam/AiDamageButton";
+import { formatSupabaseErr } from "@/hooks/useDocuments";
 
 export default function SiteCamFeed() {
   const { data: feed = [], isLoading } = useSiteCamFeed(100);
@@ -45,9 +51,14 @@ export default function SiteCamFeed() {
             </h1>
             <p className="text-muted-foreground text-sm">Field recon intel — all photos & videos across operations</p>
           </div>
-          <div className="relative w-64">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search by tag, job, customer..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="default" size="sm" asChild>
+              <Link to="/sitecam/capture">Create photo</Link>
+            </Button>
+            <div className="relative w-64 min-w-[12rem]">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Search by tag, job, customer..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+            </div>
           </div>
         </div>
 
@@ -58,7 +69,9 @@ export default function SiteCamFeed() {
             <CardContent className="flex flex-col items-center justify-center py-20 text-center">
               <Camera className="h-12 w-12 text-muted-foreground/40 mb-3" />
               <p className="text-muted-foreground font-medium">No media yet</p>
-              <p className="text-sm text-muted-foreground/70 mt-1">Photos uploaded on job pages will appear here</p>
+              <p className="text-sm text-muted-foreground/70 mt-1">
+                Photos uploaded on job pages will appear here. From the feed, open an item to attach it to another job (if you can edit SiteCam).
+              </p>
             </CardContent>
           </Card>
         ) : (
@@ -76,8 +89,18 @@ export default function SiteCamFeed() {
       </PageWrapper>
 
       <Dialog open={!!selectedMedia} onOpenChange={() => setSelectedMedia(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-auto">
-          {selectedMedia && <FeedDetail media={selectedMedia} navigate={navigate} onAnnotate={(m) => { setAnnotating(m); setSelectedMedia(null); }} />}
+        <DialogContent className="!flex max-h-[90vh] w-full max-w-3xl flex-col gap-4 overflow-y-auto overscroll-contain p-6">
+          {selectedMedia && (
+            <FeedDetail
+              media={selectedMedia}
+              navigate={navigate}
+              onAnnotate={(m) => {
+                setAnnotating(m);
+                setSelectedMedia(null);
+              }}
+              onMediaJobAttached={(m) => setSelectedMedia(m)}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
@@ -86,9 +109,69 @@ export default function SiteCamFeed() {
   );
 }
 
-function FeedDetail({ media, navigate, onAnnotate }: { media: SiteCamMedia; navigate: (p: string) => void; onAnnotate: (m: SiteCamMedia) => void }) {
+function FeedDetail({
+  media,
+  navigate,
+  onAnnotate,
+  onMediaJobAttached,
+}: {
+  media: SiteCamMedia;
+  navigate: (p: string) => void;
+  onAnnotate: (m: SiteCamMedia) => void;
+  onMediaJobAttached: (m: SiteCamMedia) => void;
+}) {
+  const { can } = usePermissions();
+  const { toast } = useToast();
+  const { data: jobs = [], isLoading: jobsLoading } = useJobs();
+  const updateMedia = useUpdateSiteCamMedia();
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [jobQuery, setJobQuery] = useState("");
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+
   const imgUrl = useMediaUrl(media.annotated_path || media.original_path);
   const origUrl = useMediaUrl(media.original_path);
+  const jobJoin = media.jobs as { job_id?: string; customers?: { name: string } | null } | null | undefined;
+
+  const filteredJobs = useMemo(() => {
+    const q = jobQuery.trim().toLowerCase();
+    if (!q) return jobs;
+    return jobs.filter((j) => {
+      const idMatch = j.id.toLowerCase().includes(q);
+      const code = (j.job_id || "").toLowerCase();
+      const name = (j.customers?.name || "").toLowerCase();
+      return idMatch || code.includes(q) || name.includes(q);
+    });
+  }, [jobs, jobQuery]);
+
+  const onConfirmAttach = async () => {
+    if (!selectedJob || selectedJob.id === media.job_id) return;
+    try {
+      await updateMedia.mutateAsync({
+        id: media.id,
+        job_id: selectedJob.id,
+        previousJobId: media.job_id,
+      });
+      toast({ title: "Attached to job", description: `${selectedJob.job_id} — ${selectedJob.customers?.name ?? "Job"}` });
+      onMediaJobAttached({
+        ...media,
+        job_id: selectedJob.id,
+        folder_id: null,
+        jobs: {
+          job_id: selectedJob.job_id,
+          customers: selectedJob.customers ? { name: selectedJob.customers.name } : null,
+        },
+      });
+      setAttachOpen(false);
+      setSelectedJob(null);
+      setJobQuery("");
+    } catch (e) {
+      toast({
+        title: "Could not attach",
+        description: formatSupabaseErr(e),
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <>
@@ -99,28 +182,107 @@ function FeedDetail({ media, navigate, onAnnotate }: { media: SiteCamMedia; navi
         </DialogTitle>
       </DialogHeader>
       <div className="space-y-3">
-        {media.type === "photo" ? (
-          imgUrl ? <img src={imgUrl} alt="" className="w-full rounded-lg" /> : <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-        ) : (
-          origUrl ? <video src={origUrl} controls className="w-full rounded-lg" /> : <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-        )}
+        <div className="flex max-h-[min(55vh,600px)] w-full items-center justify-center overflow-hidden rounded-lg bg-muted">
+          {media.type === "photo" ? (
+            imgUrl ? (
+              <img src={imgUrl} alt="" className="max-h-full max-w-full object-contain" />
+            ) : (
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            )
+          ) : origUrl ? (
+            <video src={origUrl} controls className="max-h-full max-w-full object-contain" />
+          ) : (
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          )}
+        </div>
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex gap-1">{media.tags?.map(t => <Badge key={t} variant="outline" className="text-xs">{t}</Badge>)}</div>
           <p className="text-xs text-muted-foreground">{format(new Date(media.uploaded_at), "MMM d h:mm a")}</p>
         </div>
-        <div className="flex gap-2">
-          {(media.jobs as any)?.job_id && (
+        <div className="flex flex-wrap gap-2">
+          {media.job_id && (
             <Button variant="outline" size="sm" onClick={() => navigate(`/operations/${media.job_id}`)}>
-              View Job: {(media.jobs as any).job_id}
+              {jobJoin?.job_id ? `View Job: ${jobJoin.job_id}` : "View job"}
+            </Button>
+          )}
+          {can("edit_sitecam") && (
+            <Button variant="outline" size="sm" onClick={() => setAttachOpen(true)}>
+              <Link2 className="mr-1 h-3.5 w-3.5" /> Attach to job
             </Button>
           )}
           {media.type === "photo" && (
-            <Button variant="outline" size="sm" onClick={() => onAnnotate(media)}>
-              <Pencil className="mr-1 h-3.5 w-3.5" /> Annotate
-            </Button>
+            <>
+              <Button variant="outline" size="sm" onClick={() => onAnnotate(media)}>
+                <Pencil className="mr-1 h-3.5 w-3.5" /> Annotate
+              </Button>
+              <AiDamageButton media={media} />
+            </>
           )}
         </div>
       </div>
+
+      <Dialog open={attachOpen} onOpenChange={(o) => { setAttachOpen(o); if (!o) { setSelectedJob(null); setJobQuery(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Attach to job</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Move this media to another job. Folder placement is cleared so it appears at the job root in SiteCam.
+          </p>
+          <div className="space-y-2">
+            <Input
+              placeholder="Search by job code, customer, or id…"
+              value={jobQuery}
+              onChange={(e) => setJobQuery(e.target.value)}
+              disabled={jobsLoading}
+            />
+            <ScrollArea className="h-56 rounded-md border">
+              {jobsLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredJobs.length === 0 ? (
+                <p className="p-3 text-sm text-muted-foreground">No jobs match.</p>
+              ) : (
+                <ul className="p-1">
+                  {filteredJobs.map((j) => {
+                    const active = selectedJob?.id === j.id;
+                    return (
+                      <li key={j.id}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedJob(j)}
+                          className={
+                            "w-full rounded-md px-2 py-2 text-left text-sm transition-colors " +
+                            (active ? "bg-accent text-accent-foreground" : "hover:bg-muted/80")
+                          }
+                        >
+                          <span className="font-mono text-xs">{j.job_id}</span>
+                          {j.customers?.name ? (
+                            <span className="mt-0.5 block text-muted-foreground">{j.customers.name}</span>
+                          ) : null}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </ScrollArea>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setAttachOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={!selectedJob || selectedJob.id === media.job_id || updateMedia.isPending}
+              onClick={() => void onConfirmAttach()}
+            >
+              {updateMedia.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Attach"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

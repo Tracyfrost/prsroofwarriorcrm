@@ -1,31 +1,288 @@
 import { Link, useLocation } from "react-router-dom";
-import {
-  Grid,
-  User,
-  Users,
-  Briefcase,
-  List,
-  Hammer,
-  Calendar,
-  DollarSign,
-  BarChart3,
-  TrendingUp,
-  Package,
-  Camera,
-  BookOpen,
-  Phone,
-  PhoneCall,
-  Shield,
-  Settings,
-  Lock,
-} from "lucide-react";
+import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { ChevronDown, Lock } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { BattleTooltip } from "@/components/BattleTooltip";
+import { useSidebar } from "@/components/ui/sidebar";
+import { MAIN_NAV_ITEMS, MAIN_NAV_TOP_BAR_ITEMS, type MainNavItemDef } from "@/config/mainNav";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 
 type Permission = import("@/hooks/usePermissions").Permission;
+
+const TOP_NAV_GAP_PX = 4;
+const NAV_ICON = "h-4 w-4 shrink-0";
+
+function maxVisibleNavItems(widths: number[], viewportWidth: number, gap: number): number {
+  const n = widths.length;
+  if (n === 0 || viewportWidth <= 0) return 0;
+  for (let k = n; k >= 0; k--) {
+    const itemsSum = widths.slice(0, k).reduce((a, b) => a + b, 0);
+    const gapsSum = k > 1 ? (k - 1) * gap : 0;
+    if (itemsSum + gapsSum <= viewportWidth) return k;
+  }
+  return 0;
+}
+
+function useSidebarNavIsActive() {
+  const location = useLocation();
+  const { user } = useAuth();
+  return useCallback(
+    (to: string) => {
+      if (to === "/operations") {
+        const p = location.pathname;
+        if (p === "/operations") return true;
+        if (p.startsWith("/operations/")) return true;
+        if (p === "/jobs" || p.startsWith("/jobs/")) return true;
+        if (p.startsWith("/commissions")) return true;
+        if (p.startsWith("/financials")) return true;
+        if (p.startsWith("/reports")) return true;
+        if (p.startsWith("/sitecam")) return true;
+        return false;
+      }
+      if (to === "/officers-hub") {
+        const p = location.pathname;
+        return (
+          p === "/officers-hub" ||
+          p === "/manager" ||
+          p === "/inventory" ||
+          p === "/battle-ledger" ||
+          p === "/lead-arsenal" ||
+          p === "/call-command"
+        );
+      }
+      if (to === "/production") return location.pathname === "/production";
+      if (to === "/users/me")
+        return location.pathname === "/users/me" || location.pathname === `/users/${user?.id}`;
+      if (to === "/") return location.pathname === "/";
+      return location.pathname.startsWith(to);
+    },
+    [location.pathname, user?.id],
+  );
+}
+
+function TopNavBarFace({
+  item,
+  active,
+}: {
+  item: MainNavItemDef;
+  active: boolean;
+}) {
+  const { can } = usePermissions();
+  const Icon = item.Icon;
+  const locked = item.requiredPerm ? !can(item.requiredPerm) : false;
+
+  if (locked) {
+    return (
+      <div
+        className={cn(
+          "flex cursor-not-allowed select-none items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium text-muted-foreground/50 md:text-sm",
+        )}
+      >
+        <Icon className={NAV_ICON} />
+        <span className="whitespace-nowrap">{item.label}</span>
+        <Lock className="h-3 w-3 shrink-0" />
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      to={item.to}
+      className={cn(
+        "flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors duration-150 md:text-sm",
+        active
+          ? item.activeClass ?? "bg-sidebar-accent text-sidebar-primary"
+          : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+      )}
+    >
+      <Icon className={NAV_ICON} />
+      <span className="whitespace-nowrap">{item.label}</span>
+    </Link>
+  );
+}
+
+function TopNavBarItem({
+  item,
+  isActive,
+}: {
+  item: MainNavItemDef;
+  isActive: boolean;
+}) {
+  const { can } = usePermissions();
+  const locked = item.requiredPerm ? !can(item.requiredPerm) : false;
+
+  const face = <TopNavBarFace item={item} active={isActive} />;
+
+  if (locked) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex shrink-0">{face}</span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">
+          <p className="text-xs">Access Denied — Command Restricted</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <BattleTooltip phraseKey={item.phraseKey} side="bottom">
+      <span className="inline-flex shrink-0">{face}</span>
+    </BattleTooltip>
+  );
+}
+
+/** Desktop horizontal primary nav with overflow → More menu. */
+export function MainNavTopBar() {
+  const isActive = useSidebarNavIsActive();
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const measureRowRef = useRef<HTMLDivElement>(null);
+  const moreMeasureRef = useRef<HTMLButtonElement>(null);
+  const [visibleCount, setVisibleCount] = useState(MAIN_NAV_TOP_BAR_ITEMS.length);
+
+  const recompute = useCallback(() => {
+    const viewport = viewportRef.current;
+    const measureRow = measureRowRef.current;
+    if (!viewport || !measureRow) return;
+
+    const widths = [...measureRow.children].map((ch) => (ch as HTMLElement).getBoundingClientRect().width);
+    const vw = viewport.getBoundingClientRect().width;
+    const kAll = maxVisibleNavItems(widths, vw, TOP_NAV_GAP_PX);
+
+    if (kAll >= MAIN_NAV_TOP_BAR_ITEMS.length) {
+      setVisibleCount(MAIN_NAV_TOP_BAR_ITEMS.length);
+      return;
+    }
+
+    const moreW = moreMeasureRef.current?.getBoundingClientRect().width ?? 88;
+    // k items + k gaps (before More) + moreW ≤ viewport width
+    const withMoreBudget = vw - moreW - TOP_NAV_GAP_PX;
+    const kWithMore = maxVisibleNavItems(widths, Math.max(0, withMoreBudget), TOP_NAV_GAP_PX);
+    setVisibleCount(kWithMore);
+  }, []);
+
+  useLayoutEffect(() => {
+    recompute();
+    const viewport = viewportRef.current;
+    const measureRow = measureRowRef.current;
+    if (!viewport) return;
+    const ro = new ResizeObserver(() => recompute());
+    ro.observe(viewport);
+    if (measureRow) ro.observe(measureRow);
+    return () => ro.disconnect();
+  }, [recompute]);
+
+  useLayoutEffect(() => {
+    const onResize = () => recompute();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [recompute]);
+
+  const visible = MAIN_NAV_TOP_BAR_ITEMS.slice(0, visibleCount);
+  const overflow = MAIN_NAV_TOP_BAR_ITEMS.slice(visibleCount);
+  const overflowActive = overflow.some((item) => isActive(item.to));
+
+  return (
+    <div className="relative hidden w-full min-w-0 md:block">
+      {/* Off-DOM width probe — matches bar link styling */}
+      <div
+        ref={measureRowRef}
+        className="pointer-events-none fixed left-0 top-0 z-[-1] flex w-max flex-nowrap gap-1 opacity-0"
+        aria-hidden
+      >
+        {MAIN_NAV_TOP_BAR_ITEMS.map((item) => (
+          <div key={item.to} className="inline-flex shrink-0">
+            <span className="inline-flex shrink-0">
+              <TopNavBarFace item={item} active={false} />
+            </span>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        ref={moreMeasureRef}
+        className="pointer-events-none fixed left-0 top-0 z-[-1] inline-flex h-9 shrink-0 items-center gap-1 rounded-md border border-sidebar-border bg-sidebar px-2 text-sm font-medium opacity-0"
+        aria-hidden
+        tabIndex={-1}
+      >
+        More
+        <ChevronDown className="h-4 w-4" />
+      </button>
+
+      <div className="flex w-full min-w-0 items-center gap-1 border-t border-sidebar-border bg-sidebar px-2 py-1.5 text-sidebar-foreground">
+        <div
+          ref={viewportRef}
+          className="flex min-h-9 min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-hidden"
+        >
+          {visible.map((item) => (
+            <TopNavBarItem key={item.to} item={item} isActive={isActive(item.to)} />
+          ))}
+        </div>
+        {overflow.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={cn(
+                  "h-9 shrink-0 gap-1 border-sidebar-border bg-sidebar-accent/20 text-sidebar-foreground hover:bg-sidebar-accent/40 hover:text-sidebar-accent-foreground",
+                  overflowActive && "border-primary/30 bg-primary/10 text-primary",
+                )}
+              >
+                More
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="max-h-[min(70vh,24rem)] w-56 overflow-y-auto">
+              {overflow.map((item) => (
+                <TopNavOverflowMenuItem key={item.to} item={item} isActive={isActive(item.to)} />
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TopNavOverflowMenuItem({ item, isActive }: { item: MainNavItemDef; isActive: boolean }) {
+  const { can } = usePermissions();
+  const Icon = item.Icon;
+  const locked = item.requiredPerm ? !can(item.requiredPerm) : false;
+
+  if (locked) {
+    return (
+      <DropdownMenuItem disabled className="gap-2 opacity-60">
+        <Icon className="h-4 w-4 shrink-0" />
+        {item.label}
+        <Lock className="ml-auto h-3 w-3" />
+      </DropdownMenuItem>
+    );
+  }
+
+  return (
+    <DropdownMenuItem asChild className={cn(isActive && "bg-accent")}>
+      <Link
+        to={item.to}
+        className={cn("flex cursor-pointer items-center gap-2", isActive && "font-medium text-primary")}
+      >
+        <Icon className="h-4 w-4 shrink-0" />
+        {item.label}
+      </Link>
+    </DropdownMenuItem>
+  );
+}
 
 export function SidebarNavItem({
   to,
@@ -38,7 +295,7 @@ export function SidebarNavItem({
   onClose,
 }: {
   to: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   phraseKey: string;
   requiredPerm?: Permission;
@@ -47,20 +304,60 @@ export function SidebarNavItem({
   onClose?: () => void;
 }) {
   const { can } = usePermissions();
+  const { state, isMobile } = useSidebar();
+  const collapsedDesktop = state === "collapsed" && !isMobile;
   const locked = requiredPerm ? !can(requiredPerm) : false;
 
   if (locked) {
+    const lockedInner = (
+      <div
+        className={cn(
+          "flex min-h-[44px] cursor-not-allowed select-none items-center font-medium text-muted-foreground/50",
+          "gap-3 rounded-lg px-3 py-2.5 text-sm",
+          collapsedDesktop && "justify-center px-2",
+        )}
+      >
+        {icon}
+        <span className={cn("whitespace-nowrap", collapsedDesktop && "sr-only")}>{label}</span>
+        <Lock className={cn("h-3 w-3", collapsedDesktop ? "sr-only" : "ml-auto")} />
+      </div>
+    );
+    if (collapsedDesktop) {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>{lockedInner}</TooltipTrigger>
+          <TooltipContent side="right">
+            <p className="text-xs">Access Denied — Command Restricted</p>
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+    return lockedInner;
+  }
+
+  const link = (
+    <Link
+      to={to}
+      onClick={onClose}
+      className={cn(
+        "flex min-h-[44px] items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
+        collapsedDesktop && "justify-center px-2",
+        active
+          ? activeClass ?? "bg-sidebar-accent text-sidebar-primary"
+          : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+      )}
+    >
+      {icon}
+      <span className={cn(!collapsedDesktop && "truncate", collapsedDesktop && "sr-only")}>{label}</span>
+    </Link>
+  );
+
+  if (collapsedDesktop) {
     return (
       <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="flex cursor-not-allowed select-none items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground/50">
-            {icon}
-            {label}
-            <Lock className="ml-auto h-3 w-3" />
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="right">
-          <p className="text-xs">Access Denied — Command Restricted</p>
+        <TooltipTrigger asChild>{link}</TooltipTrigger>
+        <TooltipContent side="right" align="center">
+          {label}
         </TooltipContent>
       </Tooltip>
     );
@@ -68,36 +365,12 @@ export function SidebarNavItem({
 
   return (
     <BattleTooltip phraseKey={phraseKey} side="right">
-      <Link
-        to={to}
-        onClick={onClose}
-        className={cn(
-          "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
-          active
-            ? activeClass ?? "bg-sidebar-accent text-sidebar-primary"
-            : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-        )}
-      >
-        {icon}
-        {label}
-      </Link>
+      {link}
     </BattleTooltip>
   );
 }
 
-function useSidebarNavIsActive() {
-  const location = useLocation();
-  const { user } = useAuth();
-  return (to: string) => {
-    if (to === "/operations" || to === "/jobs")
-      return location.pathname.startsWith("/operations/") || location.pathname.startsWith("/jobs");
-    if (to === "/production") return location.pathname === "/production";
-    if (to === "/users/me")
-      return location.pathname === "/users/me" || location.pathname === `/users/${user?.id}`;
-    if (to === "/") return location.pathname === "/";
-    return location.pathname.startsWith(to);
-  };
-}
+const navIcon = "h-5 w-5 shrink-0";
 
 export function MainNavList({
   onNavigate,
@@ -110,155 +383,22 @@ export function MainNavList({
 
   return (
     <nav className={cn("flex-1 space-y-1 overflow-y-auto px-3 py-4", className)}>
-      <SidebarNavItem
-        to="/"
-        icon={<Grid className="h-5 w-5" />}
-        label="Command Center"
-        phraseKey="nav_dashboard"
-        isActive={isActive("/")}
-        onClose={onNavigate}
-      />
-      <SidebarNavItem
-        to="/users/me"
-        icon={<User className="h-5 w-5" />}
-        label="My Profile"
-        phraseKey="nav_my_profile"
-        isActive={isActive("/users/me")}
-        onClose={onNavigate}
-      />
-      <SidebarNavItem
-        to="/customers"
-        icon={<Users className="h-5 w-5" />}
-        label="Customers"
-        phraseKey="nav_customers"
-        isActive={isActive("/customers")}
-        onClose={onNavigate}
-      />
-      <SidebarNavItem
-        to="/jobs"
-        icon={<Briefcase className="h-5 w-5" />}
-        label="Operations"
-        phraseKey="nav_jobs"
-        requiredPerm="add_job"
-        activeClass="bg-primary/10 text-primary"
-        isActive={isActive("/jobs")}
-        onClose={onNavigate}
-      />
-      <SidebarNavItem
-        to="/jobs-only"
-        icon={<List className="h-5 w-5" />}
-        label="Jobs Only"
-        phraseKey="nav_jobs_only"
-        requiredPerm="add_job"
-        isActive={isActive("/jobs-only")}
-        onClose={onNavigate}
-      />
-      <SidebarNavItem
-        to="/production"
-        icon={<Hammer className="h-5 w-5" />}
-        label="Production"
-        phraseKey="nav_production"
-        requiredPerm="view_production"
-        isActive={isActive("/production")}
-        onClose={onNavigate}
-      />
-      <SidebarNavItem
-        to="/appointments"
-        icon={<Calendar className="h-5 w-5" />}
-        label="Deployments"
-        phraseKey="nav_appointments"
-        isActive={isActive("/appointments")}
-        onClose={onNavigate}
-      />
-      <SidebarNavItem
-        to="/commissions"
-        icon={<DollarSign className="h-5 w-5" />}
-        label="Commissions"
-        phraseKey="nav_commissions"
-        requiredPerm="view_commissions"
-        isActive={isActive("/commissions")}
-        onClose={onNavigate}
-      />
-      <SidebarNavItem
-        to="/financials/mains"
-        icon={<BarChart3 className="h-5 w-5" />}
-        label="Financials"
-        phraseKey="nav_financials"
-        requiredPerm="edit_financials"
-        isActive={isActive("/financials/mains")}
-        onClose={onNavigate}
-      />
-      <SidebarNavItem
-        to="/reports"
-        icon={<TrendingUp className="h-5 w-5" />}
-        label="Intel Reports"
-        phraseKey="nav_reports"
-        requiredPerm="view_reports"
-        isActive={isActive("/reports")}
-        onClose={onNavigate}
-      />
-      <SidebarNavItem
-        to="/inventory"
-        icon={<Package className="h-5 w-5" />}
-        label="Arsenal"
-        phraseKey="nav_inventory"
-        requiredPerm="view_inventory"
-        isActive={isActive("/inventory")}
-        onClose={onNavigate}
-      />
-      <SidebarNavItem
-        to="/sitecam"
-        icon={<Camera className="h-5 w-5" />}
-        label="SiteCam"
-        phraseKey="nav_sitecam"
-        requiredPerm="view_sitecam"
-        isActive={isActive("/sitecam")}
-        onClose={onNavigate}
-      />
-      <SidebarNavItem
-        to="/battle-ledger"
-        icon={<BookOpen className="h-5 w-5" />}
-        label="Battle Ledger"
-        phraseKey="nav_battle_ledger"
-        requiredPerm="view_battle_ledger"
-        isActive={isActive("/battle-ledger")}
-        onClose={onNavigate}
-      />
-      <SidebarNavItem
-        to="/lead-arsenal"
-        icon={<Phone className="h-5 w-5" />}
-        label="Lead Command"
-        phraseKey="nav_lead_arsenal"
-        requiredPerm="view_reports"
-        isActive={isActive("/lead-arsenal")}
-        onClose={onNavigate}
-      />
-      <SidebarNavItem
-        to="/call-command"
-        icon={<PhoneCall className="h-5 w-5" />}
-        label="Call Command"
-        phraseKey="nav_call_command"
-        isActive={isActive("/call-command")}
-        onClose={onNavigate}
-      />
-      <SidebarNavItem
-        to="/manager"
-        icon={<Shield className="h-5 w-5" />}
-        label="Officer Hub"
-        phraseKey="nav_manager"
-        requiredPerm="view_all"
-        isActive={isActive("/manager")}
-        onClose={onNavigate}
-      />
-      <SidebarNavItem
-        to="/settings"
-        icon={<Settings className="h-5 w-5" />}
-        label="Settings"
-        phraseKey="nav_settings"
-        requiredPerm="manage_settings"
-        isActive={isActive("/settings")}
-        onClose={onNavigate}
-      />
+      {MAIN_NAV_ITEMS.map((item) => {
+        const Icon = item.Icon;
+        return (
+          <SidebarNavItem
+            key={item.to}
+            to={item.to}
+            icon={<Icon className={navIcon} />}
+            label={item.label}
+            phraseKey={item.phraseKey}
+            requiredPerm={item.requiredPerm}
+            activeClass={item.activeClass}
+            isActive={isActive(item.to)}
+            onClose={onNavigate}
+          />
+        );
+      })}
     </nav>
   );
 }

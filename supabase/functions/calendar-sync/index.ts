@@ -86,7 +86,7 @@ serve(async (req) => {
 
       const { data: appt } = await supabase
         .from("appointments")
-        .select("*, jobs(job_id, customers(name))")
+        .select("*, jobs(job_id, customers(name)), customers(name)")
         .eq("id", appointment_id)
         .single();
 
@@ -101,9 +101,11 @@ serve(async (req) => {
       const startDate = new Date(appt.date_time);
       const endDate = new Date(startDate.getTime() + duration * 60000);
 
+      const displayName =
+        appt.jobs?.customers?.name ?? (appt as { customers?: { name?: string } }).customers?.name ?? "Appointment";
       const googleEvent = {
-        summary: appt.title || `${appt.jobs?.customers?.name || "Appointment"}`,
-        description: `Job: ${appt.jobs?.job_id || "N/A"}\nNotes: ${appt.notes || ""}`,
+        summary: appt.title || displayName,
+        description: `Job: ${appt.jobs?.job_id ?? "—"}\nNotes: ${appt.notes || ""}`,
         start: { dateTime: startDate.toISOString(), timeZone: appt.timezone || "UTC" },
         end: { dateTime: endDate.toISOString(), timeZone: appt.timezone || "UTC" },
       };

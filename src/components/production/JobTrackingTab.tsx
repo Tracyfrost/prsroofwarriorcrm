@@ -145,7 +145,7 @@ export function JobTrackingTab({ jobId, tracking: initial }: Props) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       {/* === Pay Structure Summary KPIs === */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card className="shadow-card border-success/20">
@@ -229,6 +229,7 @@ export function JobTrackingTab({ jobId, tracking: initial }: Props) {
               </Badge>
             </div>
           )}
+          <div className="min-w-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -299,6 +300,7 @@ export function JobTrackingTab({ jobId, tracking: initial }: Props) {
               ))}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -461,6 +463,7 @@ export function JobTrackingTab({ jobId, tracking: initial }: Props) {
           </Button>
         </CardHeader>
         <CardContent className="p-0">
+          <div className="min-w-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -494,6 +497,7 @@ export function JobTrackingTab({ jobId, tracking: initial }: Props) {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -505,8 +509,8 @@ export function JobTrackingTab({ jobId, tracking: initial }: Props) {
 
       {/* Notes & Save */}
       <Card className="shadow-card">
-        <CardContent className="p-4 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground flex flex-wrap gap-3">
+        <CardContent className="p-4 flex min-w-0 flex-wrap items-center justify-between gap-3">
+          <div className="text-sm text-muted-foreground flex min-w-0 flex-wrap gap-3">
             <span>Gross: <Badge variant={grossProfit >= 0 ? "default" : "destructive"} className="font-mono ml-1">${grossProfit.toLocaleString()}</Badge></span>
             <span>Commission: <Badge variant="outline" className="font-mono ml-1">${commissionProfit.toLocaleString()}</Badge></span>
             <span>Sales Victory: <Badge variant={salesCommissionFinal >= 0 ? "default" : "destructive"} className="font-mono ml-1">${salesCommissionFinal.toLocaleString()}</Badge></span>

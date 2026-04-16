@@ -2,22 +2,19 @@ import { useMemo, useState, useCallback, useEffect } from "react";
 import { PageWrapper } from "@/components/PageWrapper";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
-import { useAllAppointments, useUpdateAppointment, useCreateAppointment } from "@/hooks/useJobs";
-import { useJobs } from "@/hooks/useJobs";
+import { useAllAppointments, useUpdateAppointment } from "@/hooks/useJobs";
 import { usePermissions } from "@/hooks/usePermissions";
 import { AppointmentOutcomeFields } from "@/components/appointments/AppointmentOutcomeFields";
+import { NewAppointmentDialog } from "@/components/appointments/NewAppointmentDialog";
 import {
   buildAppointmentOutcomePayload,
   parseStoredAppointment,
   type OutcomeRating,
 } from "@/components/appointments/appointmentOutcomeModel";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Calendar as CalendarIcon, Plus, AlertTriangle, Clock } from "lucide-react";
 import { Calendar as BigCalendar, dateFnsLocalizer, type View } from "react-big-calendar";
@@ -40,17 +37,20 @@ interface CalendarEvent {
   conflict?: boolean;
 }
 
+function appointmentDisplayTitle(a: Record<string, unknown>): string {
+  const title = a.title;
+  if (typeof title === "string" && title.trim()) return title.trim();
+  const jobs = a.jobs as { customers?: { name?: string }; job_id?: string } | null | undefined;
+  const customers = a.customers as { name?: string } | null | undefined;
+  return jobs?.customers?.name ?? customers?.name ?? jobs?.job_id ?? "Appointment";
+}
+
 export default function Appointments() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<View>("month");
   const [showAdd, setShowAdd] = useState(false);
   const [addDate, setAddDate] = useState("");
   const [addTime, setAddTime] = useState("09:00");
-  const [addTitle, setAddTitle] = useState("");
-  const [addJobId, setAddJobId] = useState("");
-  const [addDuration, setAddDuration] = useState("60");
-  const [addOutcomeRating, setAddOutcomeRating] = useState<OutcomeRating>("");
-  const [addNotes, setAddNotes] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [detailRating, setDetailRating] = useState<OutcomeRating>("");
   const [detailNotes, setDetailNotes] = useState("");
@@ -60,9 +60,7 @@ export default function Appointments() {
   const canAddAppointment = can("add_appointment");
 
   const { data: appointments = [], isLoading } = useAllAppointments();
-  const { data: jobs = [] } = useJobs();
   const updateAppointment = useUpdateAppointment();
-  const createAppointment = useCreateAppointment();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
@@ -70,6 +68,7 @@ export default function Appointments() {
   useEffect(() => {
     if (searchParams.get("new") !== "1") return;
     setAddDate(format(new Date(), "yyyy-MM-dd"));
+    setAddTime(format(new Date(), "HH:mm"));
     setShowAdd(true);
     const next = new URLSearchParams(searchParams);
     next.delete("new");
@@ -89,11 +88,9 @@ export default function Appointments() {
       const start = new Date(a.date_time);
       const duration = a.duration_minutes || 60;
       const end = addHours(start, duration / 60);
-      const customerName = a.jobs?.customers?.name ?? a.jobs?.job_id ?? "Appointment";
-      const title = a.title || customerName;
       return {
         id: a.id,
-        title,
+        title: appointmentDisplayTitle(a),
         start,
         end,
         resource: a,
@@ -138,46 +135,15 @@ export default function Appointments() {
     [updateAppointment, toast]
   );
 
-  const handleSelectSlot = useCallback(
-    ({ start }: { start: Date }) => {
-      setAddDate(format(start, "yyyy-MM-dd"));
-      setAddTime(format(start, "HH:mm"));
-      setShowAdd(true);
-    },
-    []
-  );
+  const handleSelectSlot = useCallback(({ start }: { start: Date }) => {
+    setAddDate(format(start, "yyyy-MM-dd"));
+    setAddTime(format(start, "HH:mm"));
+    setShowAdd(true);
+  }, []);
 
-  const handleSelectEvent = useCallback(
-    (event: CalendarEvent) => {
-      setSelectedEvent(event);
-    },
-    []
-  );
-
-  const handleCreateAppointment = async () => {
-    if (!addJobId) return;
-    const dateTime = new Date(`${addDate}T${addTime}`);
-    const { outcome, notes } = buildAppointmentOutcomePayload(addOutcomeRating, addNotes);
-    try {
-      await createAppointment.mutateAsync({
-        job_id: addJobId,
-        date_time: dateTime.toISOString(),
-        title: addTitle,
-        duration_minutes: parseInt(addDuration) || 60,
-        outcome: outcome || undefined,
-        notes: notes || undefined,
-      });
-      toast({ title: "Appointment created" });
-      setShowAdd(false);
-      setAddTitle("");
-      setAddJobId("");
-      setAddDuration("60");
-      setAddOutcomeRating("");
-      setAddNotes("");
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
-    }
-  };
+  const handleSelectEvent = useCallback((event: CalendarEvent) => {
+    setSelectedEvent(event);
+  }, []);
 
   const handleSaveEventOutcome = async () => {
     if (!selectedEvent) return;
@@ -208,6 +174,16 @@ export default function Appointments() {
     return { style };
   };
 
+  const res = selectedEvent?.resource;
+  const jobUuid = res?.job_id as string | null | undefined;
+  const jobLabel = res?.jobs?.job_id as string | undefined;
+  const customerUuid = res?.customer_id as string | null | undefined;
+  const customerName = (res?.customers as { name?: string } | undefined)?.name;
+  const jobCustomerId = res?.jobs?.customer_id as string | undefined;
+  const jobCustomerName = (res?.jobs?.customers as { name?: string } | undefined)?.name;
+  const detailCustomerId = customerUuid || jobCustomerId;
+  const detailCustomerLabel = customerName || jobCustomerName;
+
   return (
     <AppLayout>
       <PageWrapper>
@@ -219,7 +195,11 @@ export default function Appointments() {
           <Button
             size="sm"
             disabled={!canAddAppointment}
-            onClick={() => { setAddDate(format(new Date(), "yyyy-MM-dd")); setShowAdd(true); }}
+            onClick={() => {
+              setAddDate(format(new Date(), "yyyy-MM-dd"));
+              setAddTime(format(new Date(), "HH:mm"));
+              setShowAdd(true);
+            }}
           >
             <Plus className="mr-1 h-3.5 w-3.5" /> Deploy Mission
           </Button>
@@ -256,66 +236,7 @@ export default function Appointments() {
           </CardContent>
         </Card>
 
-        {/* Create Appointment Dialog */}
-        <Dialog open={showAdd} onOpenChange={setShowAdd}>
-          <DialogContent>
-            <DialogHeader><DialogTitle>New Appointment</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Title</Label>
-                <Input value={addTitle} onChange={(e) => setAddTitle(e.target.value)} placeholder="e.g. Site Inspection" />
-              </div>
-              <div className="space-y-2">
-                <Label>Job *</Label>
-                <Select value={addJobId} onValueChange={setAddJobId}>
-                  <SelectTrigger><SelectValue placeholder="Select job..." /></SelectTrigger>
-                  <SelectContent>
-                    {jobs.map((j) => (
-                      <SelectItem key={j.id} value={j.id}>
-                        {j.job_id} — {j.customers?.name || "Unknown"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>Date *</Label>
-                  <Input type="date" value={addDate} onChange={(e) => setAddDate(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Time *</Label>
-                  <Input type="time" value={addTime} onChange={(e) => setAddTime(e.target.value)} />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Duration (minutes)</Label>
-                <Select value={addDuration} onValueChange={setAddDuration}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {["15", "30", "45", "60", "90", "120"].map((d) => (
-                      <SelectItem key={d} value={d}>{d} min</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <AppointmentOutcomeFields
-                idPrefix="add-appt"
-                outcomeRating={addOutcomeRating}
-                notes={addNotes}
-                onOutcomeRatingChange={setAddOutcomeRating}
-                onNotesChange={setAddNotes}
-              />
-              <Button
-                onClick={handleCreateAppointment}
-                className="w-full"
-                disabled={!canAddAppointment || !addJobId || !addDate || createAppointment.isPending}
-              >
-                {createAppointment.isPending ? "Creating..." : "Create Appointment"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <NewAppointmentDialog open={showAdd} onOpenChange={setShowAdd} defaultDate={addDate} defaultTime={addTime} />
 
         {/* Event Detail Dialog */}
         <Dialog open={!!selectedEvent} onOpenChange={(open) => { if (!open) setSelectedEvent(null); }}>
@@ -341,18 +262,33 @@ export default function Appointments() {
                     <AlertTriangle className="mr-1 h-3 w-3" /> Scheduling Conflict
                   </Badge>
                 )}
-                {selectedEvent.resource?.jobs?.job_id && (
+                {jobUuid && jobLabel ? (
                   <div className="text-sm">
                     <span className="text-muted-foreground">Job:</span>{" "}
                     <button
                       type="button"
-                      className="text-primary hover:underline font-medium"
-                      onClick={() => { setSelectedEvent(null); navigate(`/operations/${selectedEvent.resource.job_id}`); }}
+                      className="font-medium text-primary hover:underline"
+                      onClick={() => {
+                        setSelectedEvent(null);
+                        navigate(`/operations/${jobUuid}`);
+                      }}
                     >
-                      {selectedEvent.resource.jobs.job_id}
+                      {jobLabel}
                     </button>
                   </div>
-                )}
+                ) : null}
+                {detailCustomerId ? (
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Customer:</span>{" "}
+                    <Link
+                      to={`/customers/${detailCustomerId}`}
+                      className="font-medium text-primary hover:underline"
+                      onClick={() => setSelectedEvent(null)}
+                    >
+                      {detailCustomerLabel || "View customer"}
+                    </Link>
+                  </div>
+                ) : null}
                 <AppointmentOutcomeFields
                   idPrefix="cal-detail"
                   outcomeRating={detailRating}
@@ -372,14 +308,25 @@ export default function Appointments() {
                       {updateAppointment.isPending ? "Saving…" : "Save outcome"}
                     </Button>
                   ) : null}
-                  <Button variant="outline" className="w-full" onClick={() => { setSelectedEvent(null); navigate(`/operations/${selectedEvent.resource.job_id}`); }}>
-                    View job (operations)
-                  </Button>
-                  <Button variant="ghost" className="w-full" asChild>
-                    <Link to={`/jobs/${selectedEvent.resource.job_id}`} onClick={() => setSelectedEvent(null)}>
-                      Open job profile
-                    </Link>
-                  </Button>
+                  {jobUuid ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => {
+                          setSelectedEvent(null);
+                          navigate(`/operations/${jobUuid}`);
+                        }}
+                      >
+                        View job (operations)
+                      </Button>
+                      <Button variant="ghost" className="w-full" asChild>
+                        <Link to={`/jobs/${jobUuid}`} onClick={() => setSelectedEvent(null)}>
+                          Open job profile
+                        </Link>
+                      </Button>
+                    </>
+                  ) : null}
                 </div>
               </div>
             )}

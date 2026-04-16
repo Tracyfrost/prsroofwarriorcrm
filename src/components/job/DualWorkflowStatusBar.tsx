@@ -112,7 +112,7 @@ function JobFlowStatusCard({
       type="button"
       onClick={onSelect}
       className={cn(
-        "flex h-[104px] w-[160px] min-w-[150px] max-w-[180px] shrink-0 flex-col rounded-lg border border-border/80 p-3 text-center shadow-sm transition-all",
+        "flex h-[104px] w-full min-w-0 flex-col rounded-lg border border-border/80 p-3 text-center shadow-sm transition-all",
         "border-t-[5px] hover:brightness-[1.02] dark:hover:brightness-110",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         isActive && "shadow-md",
@@ -201,9 +201,9 @@ function StatusBar({
         </div>
       )}
 
-      <div className="job-flow-strip-wrap rounded-md">
+      <div className="job-flow-strip-wrap w-full min-w-0 max-w-full rounded-md">
         <ul
-          className="job-flow-hscroll flex list-none flex-row gap-2 overflow-x-auto overscroll-x-contain scroll-smooth pb-1"
+          className="job-flow-hscroll flex min-w-0 list-none flex-row gap-2 overflow-x-auto overscroll-x-contain scroll-smooth pb-1"
           role="list"
           aria-label={regionLabel}
         >
@@ -213,7 +213,7 @@ function StatusBar({
               ref={(el) => {
                 itemRefs.current[idx] = el;
               }}
-              className="shrink-0"
+              className="min-w-[120px] max-w-[160px] flex-[1_1_120px] sm:min-w-[150px] sm:max-w-[180px] sm:flex-[1_1_150px]"
               role="listitem"
             >
               <JobFlowStatusCard
@@ -267,7 +267,7 @@ export function DualWorkflowStatusBar({
   const branchPointIdx = effectiveMainStatuses.findIndex((s) => s.name === branchPointStatus);
 
   return (
-    <div className="space-y-2">
+    <div className="w-full min-w-0 space-y-2">
       {hasSupplement && supplementStatuses.length > 0 && (
         <div className="relative">
           <div className="relative pl-4 pr-4">

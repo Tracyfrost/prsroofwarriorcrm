@@ -4,7 +4,7 @@ import { CustomReportRunner } from "./CustomReportRunner";
 
 export function ReportCustom() {
   return (
-    <Card className="shadow-card">
+    <Card className="min-w-0 max-w-full shadow-card">
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
           <SlidersHorizontal className="h-4 w-4" /> Custom Reports

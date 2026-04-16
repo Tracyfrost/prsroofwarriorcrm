@@ -12,6 +12,7 @@ import { useCreateAppointment, useUpdateAppointment } from "@/hooks/useJobs";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { AppointmentOutcomeFields } from "./AppointmentOutcomeFields";
+import { NewAppointmentDialog } from "./NewAppointmentDialog";
 import {
   buildAppointmentOutcomePayload,
   parseStoredAppointment,
@@ -23,10 +24,12 @@ export function JobAppointmentsBlock({
   jobId,
   appointments,
   layout = "default",
+  addMode = "inline",
 }: {
   jobId: string;
   appointments: any[];
   layout?: "default" | "sidebar";
+  addMode?: "inline" | "dialog";
 }) {
   const sidebar = layout === "sidebar";
   const { toast } = useToast();
@@ -37,6 +40,9 @@ export function JobAppointmentsBlock({
   const updateAppointment = useUpdateAppointment();
 
   const [apptDate, setApptDate] = useState("");
+  const [showDialogAdd, setShowDialogAdd] = useState(false);
+  const [dialogDate, setDialogDate] = useState("");
+  const [dialogTime, setDialogTime] = useState("09:00");
   const [addRating, setAddRating] = useState<OutcomeRating>("");
   const [addNotes, setAddNotes] = useState("");
   const [editing, setEditing] = useState<any | null>(null);
@@ -141,18 +147,34 @@ export function JobAppointmentsBlock({
           {canAdd ? (
             <div className={`border-t ${sidebar ? "space-y-2 pt-3" : "space-y-3 pt-4"}`}>
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Add appointment</p>
-              <Input type="datetime-local" value={apptDate} onChange={(e) => setApptDate(e.target.value)} />
-              <AppointmentOutcomeFields
-                idPrefix={`job-appt-${jobId}`}
-                outcomeRating={addRating}
-                notes={addNotes}
-                onOutcomeRatingChange={setAddRating}
-                onNotesChange={setAddNotes}
-                notesRows={sidebar ? 2 : 3}
-              />
-              <Button className="min-h-[44px] w-full" onClick={handleAdd} disabled={!apptDate || createAppointment.isPending}>
-                {createAppointment.isPending ? "Adding…" : "Add appointment"}
-              </Button>
+              {addMode === "dialog" ? (
+                <Button
+                  className="min-h-[44px] w-full"
+                  onClick={() => {
+                    const now = new Date();
+                    setDialogDate(format(now, "yyyy-MM-dd"));
+                    setDialogTime(format(now, "HH:mm"));
+                    setShowDialogAdd(true);
+                  }}
+                >
+                  Add appointment
+                </Button>
+              ) : (
+                <>
+                  <Input type="datetime-local" value={apptDate} onChange={(e) => setApptDate(e.target.value)} />
+                  <AppointmentOutcomeFields
+                    idPrefix={`job-appt-${jobId}`}
+                    outcomeRating={addRating}
+                    notes={addNotes}
+                    onOutcomeRatingChange={setAddRating}
+                    onNotesChange={setAddNotes}
+                    notesRows={sidebar ? 2 : 3}
+                  />
+                  <Button className="min-h-[44px] w-full" onClick={handleAdd} disabled={!apptDate || createAppointment.isPending}>
+                    {createAppointment.isPending ? "Adding…" : "Add appointment"}
+                  </Button>
+                </>
+              )}
             </div>
           ) : null}
         </CardContent>
@@ -194,6 +216,13 @@ export function JobAppointmentsBlock({
           ) : null}
         </DialogContent>
       </Dialog>
+      <NewAppointmentDialog
+        open={showDialogAdd}
+        onOpenChange={setShowDialogAdd}
+        defaultDate={dialogDate}
+        defaultTime={dialogTime}
+        defaultJobId={jobId}
+      />
     </>
   );
 }

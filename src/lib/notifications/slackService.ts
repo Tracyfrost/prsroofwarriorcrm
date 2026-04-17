@@ -132,12 +132,23 @@ async function invokeSlackNotify(
   return data ?? { success: false, error: "No response from slack-notify function." };
 }
 
-/** Test channel message; bypasses notification toggles. Webhook must be non-empty. */
-export async function sendSlackConnectionTest(webhookUrl: string): Promise<void> {
-  const url = webhookUrl.trim();
-  if (!url) {
-    throw new Error("Enter a webhook URL before testing.");
+/** Test channel message using persisted webhook in global_settings. */
+export async function sendSlackConnectionTest(): Promise<void> {
+  const { data, error } = await supabase
+    .from("global_settings")
+    .select("value")
+    .eq("key", SLACK_WEBHOOK_URL_KEY)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message || "Failed to load Slack webhook URL from global settings.");
   }
+
+  const url = parseWebhookValue(data?.value).trim();
+  if (!url) {
+    throw new Error("Save a Slack webhook URL before testing the connection.");
+  }
+
   await invokeSlackNotify({
     type: "channel",
     message: "\u2705 PRS CRM Slack connection is working!",

@@ -117,7 +117,7 @@ export function SlackSettings() {
 
   const handleTest = async () => {
     try {
-      await sendSlackConnectionTest(webhookUrl);
+      await sendSlackConnectionTest();
       toast({ title: "Test sent", description: "Check your Slack channel for the test message." });
     } catch (e: unknown) {
       toast({

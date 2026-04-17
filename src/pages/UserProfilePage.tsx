@@ -257,6 +257,7 @@ function EditProfileModal({
     signature_url: string | null;
     signature_text: string | null;
     profile_picture_url: string | null;
+    slack_user_id?: string | null;
   };
   onClose: () => void;
 }) {
@@ -266,6 +267,7 @@ function EditProfileModal({
   const [address, setAddress] = useState(profile.address ?? "");
   const [googleDriveLink, setGoogleDriveLink] = useState(profile.google_drive_link ?? "");
   const [signatureText, setSignatureText] = useState(profile.signature_text ?? "");
+  const [slackUserId, setSlackUserId] = useState(profile.slack_user_id ?? "");
   const updateProfile = useUpdateProfile();
   const { toast } = useToast();
 
@@ -280,6 +282,7 @@ function EditProfileModal({
         address: address || null,
         google_drive_link: googleDriveLink || null,
         signature_text: signatureText || null,
+        slack_user_id: slackUserId.trim() || null,
       });
       toast({ title: "Profile updated" });
       onClose();
@@ -338,6 +341,19 @@ function EditProfileModal({
               onChange={(e) => setGoogleDriveLink(e.target.value)}
               placeholder="https://..."
             />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Slack User ID</label>
+            <input
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+              value={slackUserId}
+              onChange={(e) => setSlackUserId(e.target.value)}
+              placeholder="U01234ABCDE"
+              autoComplete="off"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Find this in Slack: click your name → Profile → More → Copy member ID
+            </p>
           </div>
           <div>
             <label className="text-sm font-medium">Signature (text)</label>

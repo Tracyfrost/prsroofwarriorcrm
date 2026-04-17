@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -5,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { useMyProfile } from "@/hooks/useHierarchy";
+import { checkOverdueFollowUps } from "@/hooks/useCallSetter";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import CustomerDetail from "./pages/CustomerDetail";
@@ -34,9 +36,28 @@ import JobsOnly from "./pages/JobsOnly";
 import LeadArsenal from "./pages/LeadArsenal";
 import CallCommand from "./pages/CallCommand";
 import UserProfilePage from "./pages/UserProfilePage";
+import ArchivedCustomers from "./pages/ArchivedCustomers";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+
+function FollowUpSlackScheduler() {
+  const { user } = useAuth();
+  useEffect(() => {
+    if (!user?.id) return;
+    const tick = async () => {
+      try {
+        await checkOverdueFollowUps();
+      } catch (e) {
+        console.error("checkOverdueFollowUps failed:", e);
+      }
+    };
+    void tick();
+    const intervalId = window.setInterval(tick, 60 * 60 * 1000);
+    return () => clearInterval(intervalId);
+  }, [user?.id]);
+  return null;
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -81,6 +102,7 @@ function ChangePasswordRoute({ children }: { children: React.ReactNode }) {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
+      <FollowUpSlackScheduler />
       <TooltipProvider>
         <Toaster />
         <Sonner />
@@ -114,6 +136,7 @@ const App = () => (
             <Route path="/lead-arsenal" element={<ProtectedRoute><LeadArsenal /></ProtectedRoute>} />
             <Route path="/call-command" element={<ProtectedRoute><CallCommand /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+            <Route path="/customers/archived" element={<ProtectedRoute><ArchivedCustomers /></ProtectedRoute>} />
             <Route path="/users/:id" element={<ProtectedRoute><UserProfilePage /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>

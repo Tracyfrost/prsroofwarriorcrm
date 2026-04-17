@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
+import { sendDMNotification } from "@/lib/notifications/slackService";
+import { SlackNotificationType } from "@/lib/notifications/notificationTypes";
 
 export type MasterLeadStatus = "new" | "called" | "bad" | "follow_up" | "appointment_set" | "converted" | "dead";
 
@@ -75,6 +77,117 @@ export interface SetterAssignment {
   active: boolean;
 }
 
+type FollowUpLeadSnapshot = Pick<
+  MasterLead,
+  "id" | "first_name" | "last_name" | "appointment_date" | "appointment_time" | "notes" | "assigned_setter_id" | "status"
+>;
+
+function formatCustomerName(firstName?: string | null, lastName?: string | null) {
+  const fullName = `${firstName ?? ""} ${lastName ?? ""}`.trim();
+  return fullName || "Unknown Customer";
+}
+
+function formatScheduledDateTime(appointmentDate?: string | null, appointmentTime?: string | null) {
+  if (appointmentDate && appointmentTime) return `${appointmentDate} ${appointmentTime}`;
+  if (appointmentDate) return appointmentDate;
+  if (appointmentTime) return appointmentTime;
+  return "Not provided";
+}
+
+async function sendFollowUpScheduledDM(lead: FollowUpLeadSnapshot): Promise<void> {
+  if (!lead.assigned_setter_id) return;
+
+  const { data: repProfile, error: profileError } = await supabase
+    .from("profiles")
+    .select("slack_user_id")
+    .eq("user_id", lead.assigned_setter_id)
+    .maybeSingle();
+
+  if (profileError) throw profileError;
+
+  const slackUserId = (repProfile as any)?.slack_user_id as string | undefined;
+  if (!slackUserId) return;
+
+  const customerName = formatCustomerName(lead.first_name, lead.last_name);
+  const lines = [
+    `⏰ Follow-up Scheduled: *${customerName}*`,
+    `📅 Date: ${formatScheduledDateTime(lead.appointment_date, lead.appointment_time)}`,
+  ];
+
+  if (lead.notes?.trim()) {
+    lines.push(`📝 Notes: ${lead.notes.trim()}`);
+  }
+
+  lines.push("Check it out in PRS CRM.");
+  await sendDMNotification(SlackNotificationType.FollowUpScheduledDm, slackUserId, lines.join("\n"));
+}
+
+export async function checkOverdueFollowUps(): Promise<void> {
+  const today = new Date().toISOString().split("T")[0];
+  const { data: overdueLeads, error: overdueError } = await supabase
+    .from("master_leads" as any)
+    .select("id, first_name, last_name, appointment_date, appointment_time, assigned_setter_id, status")
+    .in("status", ["follow_up", "appointment_set"])
+    .lt("appointment_date", today)
+    .not("assigned_setter_id", "is", null);
+
+  if (overdueError) throw overdueError;
+
+  for (const lead of ((overdueLeads ?? []) as FollowUpLeadSnapshot[])) {
+    if (!lead.assigned_setter_id) continue;
+
+    try {
+      const { data: repProfile, error: repError } = await supabase
+        .from("profiles")
+        .select("id, name, slack_user_id, manager_id")
+        .eq("user_id", lead.assigned_setter_id)
+        .maybeSingle();
+
+      if (repError) throw repError;
+      if (!repProfile) continue;
+
+      const repName = (repProfile as any).name || "Unknown Rep";
+      const dueDate = formatScheduledDateTime(lead.appointment_date, lead.appointment_time);
+      const message = [
+        `🚨 Overdue Follow-up: *${formatCustomerName(lead.first_name, lead.last_name)}*`,
+        `📅 Was due: ${dueDate}`,
+        `👤 Assigned to: ${repName}`,
+      ].join("\n");
+
+      const repSlackId = (repProfile as any).slack_user_id as string | undefined;
+      if (repSlackId) {
+        try {
+          await sendDMNotification(SlackNotificationType.OverdueFollowUpDm, repSlackId, message);
+        } catch (error) {
+          console.error("Failed to send overdue follow-up DM to rep", error);
+        }
+      }
+
+      const managerProfileId = (repProfile as any).manager_id as string | null | undefined;
+      if (managerProfileId) {
+        const { data: managerProfile, error: managerError } = await supabase
+          .from("profiles")
+          .select("slack_user_id")
+          .eq("id", managerProfileId)
+          .maybeSingle();
+
+        if (managerError) throw managerError;
+        const managerSlackId = (managerProfile as any)?.slack_user_id as string | undefined;
+
+        if (managerSlackId && managerSlackId !== repSlackId) {
+          try {
+            await sendDMNotification(SlackNotificationType.OverdueFollowUpDm, managerSlackId, message);
+          } catch (error) {
+            console.error("Failed to send overdue follow-up DM to manager", error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Failed overdue follow-up notification flow", error);
+    }
+  }
+}
+
 // ── Master Leads ──
 export function useMasterLeads(onlyMine = false) {
   const { user } = useAuth();
@@ -97,6 +210,26 @@ export function useUpdateMasterLead() {
     mutationFn: async ({ id, ...updates }: Partial<MasterLead> & { id: string }) => {
       const { error } = await supabase.from("master_leads" as any).update(updates as any).eq("id", id);
       if (error) throw error;
+
+      const shouldNotifyFollowUp =
+        updates.status === "follow_up" || updates.status === "appointment_set";
+
+      if (!shouldNotifyFollowUp) return;
+
+      try {
+        const { data: lead, error: leadError } = await supabase
+          .from("master_leads" as any)
+          .select("id, first_name, last_name, appointment_date, appointment_time, notes, assigned_setter_id, status")
+          .eq("id", id)
+          .maybeSingle();
+
+        if (leadError) throw leadError;
+        if (!lead) return;
+
+        await sendFollowUpScheduledDM(lead as FollowUpLeadSnapshot);
+      } catch (notifyError) {
+        console.error("Failed to send follow-up scheduled DM", notifyError);
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["master-leads"] }),
   });

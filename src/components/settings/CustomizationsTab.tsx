@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useCallback, useState } from "react";
+import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { GitBranch, Milestone, Palette, Tag, Pencil, Save, Trash2, Plus } from "lucide-react";
+import { GitBranch, GripVertical, Milestone, Palette, Tag, Pencil, Save, Trash2, Plus } from "lucide-react";
 import {
   type JobStatus,
   type LeadSource,
@@ -35,8 +36,19 @@ import {
   useUpdateProductionMilestone,
 } from "@/hooks/useCustomizations";
 import { useCreateStatusBranch, useDeleteStatusBranch, useStatusBranches, useUpdateStatusBranch } from "@/hooks/useStatusBranches";
+import { cn } from "@/lib/utils";
 
 const toSlug = (value: string) => value.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+
+function reorderByDragResult<T>(list: T[], result: DropResult): T[] | null {
+  if (!result.destination) return null;
+  if (result.destination.droppableId !== result.source.droppableId) return null;
+  if (result.destination.index === result.source.index) return null;
+  const next = Array.from(list);
+  const [removed] = next.splice(result.source.index, 1);
+  next.splice(result.destination.index, 0, removed);
+  return next;
+}
 
 function LeadSourcesSection() {
   const { toast } = useToast();
@@ -51,15 +63,31 @@ function LeadSourcesSection() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editDisplay, setEditDisplay] = useState("");
   const [editColor, setEditColor] = useState("");
+  const [orderedSources, setOrderedSources] = useState<LeadSource[] | null>(null);
+  const displaySources = orderedSources ?? sources;
 
-  const moveSource = (index: number, delta: number) => {
-    const target = index + delta;
-    if (target < 0 || target >= sources.length) return;
-    const reordered = [...sources];
-    const [moved] = reordered.splice(index, 1);
-    reordered.splice(target, 0, moved);
-    reorderLeadSources.mutate(reordered.map((s, i) => ({ id: s.id, sort_order: i + 1 })));
-  };
+  const handleLeadSourcesDragEnd = useCallback(
+    (result: DropResult) => {
+      const reordered = reorderByDragResult(displaySources, result);
+      if (!reordered) return;
+      setOrderedSources(reordered);
+      reorderLeadSources.mutate(
+        reordered.map((s, i) => ({ id: s.id, sort_order: i + 1 })),
+        {
+          onSuccess: () => setOrderedSources(null),
+          onError: (e) => {
+            setOrderedSources(null);
+            toast({
+              title: "Error",
+              description: e instanceof Error ? e.message : String(e),
+              variant: "destructive",
+            });
+          },
+        },
+      );
+    },
+    [displaySources, reorderLeadSources, toast],
+  );
 
   const saveEdit = () => {
     if (!editId || !editDisplay.trim()) return;
@@ -74,7 +102,7 @@ function LeadSourcesSection() {
       display_name: newDisplay.trim(),
       color: newColor,
       active: true,
-      sort_order: sources.length + 1,
+      sort_order: displaySources.length + 1,
       requires_pool: false,
       default_cost_per_lead: 0,
     });
@@ -90,7 +118,7 @@ function LeadSourcesSection() {
           <Tag className="h-4 w-4" />
           Lead Sources
         </CardTitle>
-        <Badge variant="outline">{sources.length}</Badge>
+        <Badge variant="outline">{displaySources.length}</Badge>
       </CardHeader>
       <CardContent className="border-b p-3">
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -100,66 +128,94 @@ function LeadSourcesSection() {
         </div>
       </CardContent>
       <CardContent className="p-0">
-        <Table containerClassName="overflow-visible" className="table-fixed">
-          <TableHeader>
-            <TableRow>
-              <TableHead className="min-w-0 w-[22%]">Display</TableHead>
-              <TableHead className="min-w-0 w-[18%]">Key</TableHead>
-              <TableHead className="min-w-0 w-[18%]">Color</TableHead>
-              <TableHead className="w-24">Active</TableHead>
-              <TableHead className="min-w-0">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sources.map((source, index) => (
-              <TableRow key={source.id}>
-                <TableCell className="min-w-0 break-words font-medium">
-                  {editId === source.id ? (
-                    <Input value={editDisplay} onChange={(e) => setEditDisplay(e.target.value)} />
-                  ) : source.display_name}
-                </TableCell>
-                <TableCell className="min-w-0 break-all font-mono text-xs text-muted-foreground">{source.name}</TableCell>
-                <TableCell>
-                  {editId === source.id ? (
-                    <Input type="color" className="h-9 w-20" value={editColor} onChange={(e) => setEditColor(e.target.value)} />
-                  ) : (
-                    <div className="inline-flex items-center gap-2">
-                      <span className="h-3 w-3 rounded-full border" style={{ backgroundColor: source.color }} />
-                      <span className="font-mono text-xs text-muted-foreground">{source.color}</span>
-                    </div>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Switch checked={source.active} onCheckedChange={(checked) => updateLeadSource.mutate({ id: source.id, active: checked })} />
-                </TableCell>
-                <TableCell className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-1">
-                    {editId === source.id ? (
-                      <Button size="sm" variant="outline" onClick={saveEdit}><Save className="h-3 w-3" /></Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setEditId(source.id);
-                          setEditDisplay(source.display_name);
-                          setEditColor(source.color);
-                        }}
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </Button>
-                    )}
-                    <Button size="sm" variant="outline" onClick={() => moveSource(index, -1)}>Up</Button>
-                    <Button size="sm" variant="outline" onClick={() => moveSource(index, 1)}>Down</Button>
-                    <Button size="sm" variant="destructive" onClick={() => deleteLeadSource.mutate(source.id)}>
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <DragDropContext onDragEnd={handleLeadSourcesDragEnd}>
+          <Droppable droppableId="lead-sources-table">
+            {(dropProvided) => (
+              <Table containerClassName="overflow-visible" className="table-fixed">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8 px-1" />
+                    <TableHead className="min-w-0 w-[20%]">Display</TableHead>
+                    <TableHead className="min-w-0 w-[18%]">Key</TableHead>
+                    <TableHead className="min-w-0 w-[16%]">Color</TableHead>
+                    <TableHead className="w-24">Active</TableHead>
+                    <TableHead className="min-w-0">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody ref={dropProvided.innerRef} {...dropProvided.droppableProps}>
+                  {displaySources.map((source, index) => (
+                    <Draggable key={source.id} draggableId={source.id} index={index} isDragDisabled={editId === source.id}>
+                      {(dragProvided, snap) => (
+                        <TableRow
+                          ref={dragProvided.innerRef}
+                          {...dragProvided.draggableProps}
+                          className={snap.isDragging ? "bg-muted/60" : undefined}
+                        >
+                          {editId === source.id ? (
+                            <TableCell className="w-8 px-1" />
+                          ) : (
+                            <TableCell
+                              className="w-8 px-1 cursor-grab active:cursor-grabbing touch-none"
+                              {...dragProvided.dragHandleProps}
+                            >
+                              <GripVertical className="h-4 w-4 text-muted-foreground" />
+                            </TableCell>
+                          )}
+                          <TableCell className="min-w-0 break-words font-medium">
+                            {editId === source.id ? (
+                              <Input value={editDisplay} onChange={(e) => setEditDisplay(e.target.value)} />
+                            ) : (
+                              source.display_name
+                            )}
+                          </TableCell>
+                          <TableCell className="min-w-0 break-all font-mono text-xs text-muted-foreground">{source.name}</TableCell>
+                          <TableCell>
+                            {editId === source.id ? (
+                              <Input type="color" className="h-9 w-20" value={editColor} onChange={(e) => setEditColor(e.target.value)} />
+                            ) : (
+                              <div className="inline-flex items-center gap-2">
+                                <span className="h-3 w-3 rounded-full border" style={{ backgroundColor: source.color }} />
+                                <span className="font-mono text-xs text-muted-foreground">{source.color}</span>
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Switch checked={source.active} onCheckedChange={(checked) => updateLeadSource.mutate({ id: source.id, active: checked })} />
+                          </TableCell>
+                          <TableCell className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1">
+                              {editId === source.id ? (
+                                <Button size="sm" variant="outline" onClick={saveEdit}>
+                                  <Save className="h-3 w-3" />
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setEditId(source.id);
+                                    setEditDisplay(source.display_name);
+                                    setEditColor(source.color);
+                                  }}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                              )}
+                              <Button size="sm" variant="destructive" onClick={() => deleteLeadSource.mutate(source.id)}>
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Draggable>
+                  ))}
+                  {dropProvided.placeholder}
+                </TableBody>
+              </Table>
+            )}
+          </Droppable>
+        </DragDropContext>
       </CardContent>
     </Card>
   );
@@ -177,15 +233,31 @@ function JobStatusesSection() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editDisplay, setEditDisplay] = useState("");
   const [editColor, setEditColor] = useState("");
+  const [orderedJobStatuses, setOrderedJobStatuses] = useState<JobStatus[] | null>(null);
+  const displayJobStatuses = orderedJobStatuses ?? statuses;
 
-  const moveStatus = (index: number, delta: number) => {
-    const target = index + delta;
-    if (target < 0 || target >= statuses.length) return;
-    const reordered = [...statuses];
-    const [moved] = reordered.splice(index, 1);
-    reordered.splice(target, 0, moved);
-    reorderStatuses.mutate(reordered.map((s, i) => ({ id: s.id, sequence: i + 1 })));
-  };
+  const handleJobStatusesDragEnd = useCallback(
+    (result: DropResult) => {
+      const reordered = reorderByDragResult(displayJobStatuses, result);
+      if (!reordered) return;
+      setOrderedJobStatuses(reordered);
+      reorderStatuses.mutate(
+        reordered.map((s, i) => ({ id: s.id, sequence: i + 1 })),
+        {
+          onSuccess: () => setOrderedJobStatuses(null),
+          onError: (e) => {
+            setOrderedJobStatuses(null);
+            toast({
+              title: "Error",
+              description: e instanceof Error ? e.message : String(e),
+              variant: "destructive",
+            });
+          },
+        },
+      );
+    },
+    [displayJobStatuses, reorderStatuses, toast],
+  );
 
   const addStatus = () => {
     if (!newDisplay.trim()) return;
@@ -194,7 +266,7 @@ function JobStatusesSection() {
       display_name: newDisplay.trim(),
       color: newColor,
       active: true,
-      sequence: statuses.length + 1,
+      sequence: displayJobStatuses.length + 1,
     });
     setNewDisplay("");
     setNewColor("#6b7280");
@@ -208,7 +280,7 @@ function JobStatusesSection() {
           <Palette className="h-4 w-4" />
           Job Status Flow
         </CardTitle>
-        <Badge variant="outline">{statuses.length}</Badge>
+        <Badge variant="outline">{displayJobStatuses.length}</Badge>
       </CardHeader>
       <CardContent className="border-b p-3">
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -218,62 +290,103 @@ function JobStatusesSection() {
         </div>
       </CardContent>
       <CardContent className="p-0">
-        <Table containerClassName="overflow-visible" className="table-fixed">
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-14">Seq</TableHead>
-              <TableHead className="min-w-0 w-[20%]">Display</TableHead>
-              <TableHead className="min-w-0 w-[16%]">Key</TableHead>
-              <TableHead className="min-w-0 w-[16%]">Color</TableHead>
-              <TableHead className="w-24">Active</TableHead>
-              <TableHead className="min-w-0">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {statuses.map((status, index) => (
-              <TableRow key={status.id}>
-                <TableCell>{status.sequence}</TableCell>
-                <TableCell className="min-w-0 break-words font-medium">
-                  {editId === status.id ? (
-                    <Input value={editDisplay} onChange={(e) => setEditDisplay(e.target.value)} />
-                  ) : status.display_name}
-                </TableCell>
-                <TableCell className="min-w-0 break-all font-mono text-xs text-muted-foreground">{status.name}</TableCell>
-                <TableCell>
-                  {editId === status.id ? (
-                    <Input type="color" className="h-9 w-20" value={editColor} onChange={(e) => setEditColor(e.target.value)} />
-                  ) : (
-                    <div className="inline-flex items-center gap-2">
-                      <span className="h-3 w-3 rounded-full border" style={{ backgroundColor: status.color }} />
-                      <span className="font-mono text-xs text-muted-foreground">{status.color}</span>
-                    </div>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Switch checked={status.active} onCheckedChange={(checked) => updateStatus.mutate({ id: status.id, active: checked })} />
-                </TableCell>
-                <TableCell className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-1">
-                    {editId === status.id ? (
-                      <Button size="sm" variant="outline" onClick={() => { updateStatus.mutate({ id: status.id, display_name: editDisplay, color: editColor }); setEditId(null); }}>
-                        <Save className="h-3 w-3" />
-                      </Button>
-                    ) : (
-                      <Button size="sm" variant="outline" onClick={() => { setEditId(status.id); setEditDisplay(status.display_name); setEditColor(status.color); }}>
-                        <Pencil className="h-3 w-3" />
-                      </Button>
-                    )}
-                    <Button size="sm" variant="outline" onClick={() => moveStatus(index, -1)}>Up</Button>
-                    <Button size="sm" variant="outline" onClick={() => moveStatus(index, 1)}>Down</Button>
-                    <Button size="sm" variant="destructive" onClick={() => deleteStatus.mutate(status.id)}>
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <DragDropContext onDragEnd={handleJobStatusesDragEnd}>
+          <Droppable droppableId="job-statuses-table">
+            {(dropProvided) => (
+              <Table containerClassName="overflow-visible" className="table-fixed">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8 px-1" />
+                    <TableHead className="w-12">Seq</TableHead>
+                    <TableHead className="min-w-0 w-[18%]">Display</TableHead>
+                    <TableHead className="min-w-0 w-[14%]">Key</TableHead>
+                    <TableHead className="min-w-0 w-[14%]">Color</TableHead>
+                    <TableHead className="w-24">Active</TableHead>
+                    <TableHead className="min-w-0">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody ref={dropProvided.innerRef} {...dropProvided.droppableProps}>
+                  {displayJobStatuses.map((status, index) => (
+                    <Draggable key={status.id} draggableId={status.id} index={index} isDragDisabled={editId === status.id}>
+                      {(dragProvided, snap) => (
+                        <TableRow
+                          ref={dragProvided.innerRef}
+                          {...dragProvided.draggableProps}
+                          className={snap.isDragging ? "bg-muted/60" : undefined}
+                        >
+                          {editId === status.id ? (
+                            <TableCell className="w-8 px-1" />
+                          ) : (
+                            <TableCell
+                              className="w-8 px-1 cursor-grab active:cursor-grabbing touch-none"
+                              {...dragProvided.dragHandleProps}
+                            >
+                              <GripVertical className="h-4 w-4 text-muted-foreground" />
+                            </TableCell>
+                          )}
+                          <TableCell>{index + 1}</TableCell>
+                          <TableCell className="min-w-0 break-words font-medium">
+                            {editId === status.id ? (
+                              <Input value={editDisplay} onChange={(e) => setEditDisplay(e.target.value)} />
+                            ) : (
+                              status.display_name
+                            )}
+                          </TableCell>
+                          <TableCell className="min-w-0 break-all font-mono text-xs text-muted-foreground">{status.name}</TableCell>
+                          <TableCell>
+                            {editId === status.id ? (
+                              <Input type="color" className="h-9 w-20" value={editColor} onChange={(e) => setEditColor(e.target.value)} />
+                            ) : (
+                              <div className="inline-flex items-center gap-2">
+                                <span className="h-3 w-3 rounded-full border" style={{ backgroundColor: status.color }} />
+                                <span className="font-mono text-xs text-muted-foreground">{status.color}</span>
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Switch checked={status.active} onCheckedChange={(checked) => updateStatus.mutate({ id: status.id, active: checked })} />
+                          </TableCell>
+                          <TableCell className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1">
+                              {editId === status.id ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    updateStatus.mutate({ id: status.id, display_name: editDisplay, color: editColor });
+                                    setEditId(null);
+                                  }}
+                                >
+                                  <Save className="h-3 w-3" />
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setEditId(status.id);
+                                    setEditDisplay(status.display_name);
+                                    setEditColor(status.color);
+                                  }}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                              )}
+                              <Button size="sm" variant="destructive" onClick={() => deleteStatus.mutate(status.id)}>
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Draggable>
+                  ))}
+                  {dropProvided.placeholder}
+                </TableBody>
+              </Table>
+            )}
+          </Droppable>
+        </DragDropContext>
       </CardContent>
     </Card>
   );
@@ -402,15 +515,31 @@ function ProductionMilestonesSection() {
   const deleteMilestone = useDeleteProductionMilestone();
   const reorderMilestones = useBulkUpdateMilestoneOrder();
   const [newDisplay, setNewDisplay] = useState("");
+  const [orderedMilestones, setOrderedMilestones] = useState<ProductionMilestone[] | null>(null);
+  const displayMilestones = orderedMilestones ?? milestones;
 
-  const moveMilestone = (index: number, delta: number) => {
-    const target = index + delta;
-    if (target < 0 || target >= milestones.length) return;
-    const reordered = [...milestones];
-    const [moved] = reordered.splice(index, 1);
-    reordered.splice(target, 0, moved);
-    reorderMilestones.mutate(reordered.map((m, i) => ({ id: m.id, sequence: i + 1 })));
-  };
+  const handleMilestonesDragEnd = useCallback(
+    (result: DropResult) => {
+      const reordered = reorderByDragResult(displayMilestones, result);
+      if (!reordered) return;
+      setOrderedMilestones(reordered);
+      reorderMilestones.mutate(
+        reordered.map((m, i) => ({ id: m.id, sequence: i + 1 })),
+        {
+          onSuccess: () => setOrderedMilestones(null),
+          onError: (e) => {
+            setOrderedMilestones(null);
+            toast({
+              title: "Error",
+              description: e instanceof Error ? e.message : String(e),
+              variant: "destructive",
+            });
+          },
+        },
+      );
+    },
+    [displayMilestones, reorderMilestones, toast],
+  );
 
   return (
     <Card className="min-w-0 max-w-full shadow-card">
@@ -419,7 +548,7 @@ function ProductionMilestonesSection() {
           <Milestone className="h-4 w-4" />
           Production Milestones
         </CardTitle>
-        <Badge variant="outline">{milestones.length}</Badge>
+        <Badge variant="outline">{displayMilestones.length}</Badge>
       </CardHeader>
       <CardContent className="border-b p-3">
         <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -431,7 +560,7 @@ function ProductionMilestonesSection() {
                 name: toSlug(newDisplay),
                 display_name: newDisplay.trim(),
                 active: true,
-                sequence: milestones.length + 1,
+                sequence: displayMilestones.length + 1,
               });
               setNewDisplay("");
               toast({ title: "Milestone added" });
@@ -441,23 +570,51 @@ function ProductionMilestonesSection() {
           </Button>
         </div>
       </CardContent>
-      <CardContent className="space-y-2">
-        {milestones.map((milestone, index) => (
-          <div key={milestone.id} className="flex min-w-0 flex-col gap-2 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <p className="break-words font-medium">{milestone.display_name}</p>
-              <p className="break-all font-mono text-xs text-muted-foreground">{milestone.name}</p>
-            </div>
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <Switch checked={milestone.active} onCheckedChange={(checked) => updateMilestone.mutate({ id: milestone.id, active: checked })} />
-              <Button size="sm" variant="outline" onClick={() => moveMilestone(index, -1)}>Up</Button>
-              <Button size="sm" variant="outline" onClick={() => moveMilestone(index, 1)}>Down</Button>
-              <Button size="sm" variant="destructive" onClick={() => deleteMilestone.mutate(milestone.id)}>
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            </div>
-          </div>
-        ))}
+      <CardContent>
+        <DragDropContext onDragEnd={handleMilestonesDragEnd}>
+          <Droppable droppableId="production-milestones-list">
+            {(dropProvided) => (
+              <div ref={dropProvided.innerRef} {...dropProvided.droppableProps} className="space-y-2">
+                {displayMilestones.map((milestone, idx) => (
+                  <Draggable key={milestone.id} draggableId={milestone.id} index={idx}>
+                    {(dragProvided, snap) => (
+                      <div
+                        ref={dragProvided.innerRef}
+                        {...dragProvided.draggableProps}
+                        className={cn(
+                          "flex min-w-0 flex-col gap-2 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between",
+                          snap.isDragging && "bg-muted/60 shadow-md",
+                        )}
+                      >
+                        <div className="flex min-w-0 items-start gap-2 sm:items-center sm:flex-1">
+                          <button
+                            type="button"
+                            className="mt-0.5 shrink-0 cursor-grab touch-none rounded-sm p-1 text-muted-foreground active:cursor-grabbing hover:bg-muted sm:mt-0"
+                            {...dragProvided.dragHandleProps}
+                            aria-label="Drag to reorder milestone"
+                          >
+                            <GripVertical className="h-4 w-4" />
+                          </button>
+                          <div className="min-w-0">
+                            <p className="break-words font-medium">{milestone.display_name}</p>
+                            <p className="break-all font-mono text-xs text-muted-foreground">{milestone.name}</p>
+                          </div>
+                        </div>
+                        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
+                          <Switch checked={milestone.active} onCheckedChange={(checked) => updateMilestone.mutate({ id: milestone.id, active: checked })} />
+                          <Button size="sm" variant="destructive" onClick={() => deleteMilestone.mutate(milestone.id)}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </Draggable>
+                ))}
+                {dropProvided.placeholder}
+              </div>
+            )}
+          </Droppable>
+        </DragDropContext>
       </CardContent>
     </Card>
   );
@@ -472,15 +629,31 @@ function ProductionItemStatusesSection() {
   const reorderStatuses = useBulkUpdateProductionItemStatusOrder();
   const [newDisplay, setNewDisplay] = useState("");
   const [newColor, setNewColor] = useState("#6b7280");
+  const [orderedProdItemStatuses, setOrderedProdItemStatuses] = useState<ProductionItemStatus[] | null>(null);
+  const displayProdItemStatuses = orderedProdItemStatuses ?? statuses;
 
-  const moveStatus = (index: number, delta: number) => {
-    const target = index + delta;
-    if (target < 0 || target >= statuses.length) return;
-    const reordered = [...statuses];
-    const [moved] = reordered.splice(index, 1);
-    reordered.splice(target, 0, moved);
-    reorderStatuses.mutate(reordered.map((s, i) => ({ id: s.id, sequence: i + 1 })));
-  };
+  const handleProdItemStatusesDragEnd = useCallback(
+    (result: DropResult) => {
+      const reordered = reorderByDragResult(displayProdItemStatuses, result);
+      if (!reordered) return;
+      setOrderedProdItemStatuses(reordered);
+      reorderStatuses.mutate(
+        reordered.map((s, i) => ({ id: s.id, sequence: i + 1 })),
+        {
+          onSuccess: () => setOrderedProdItemStatuses(null),
+          onError: (e) => {
+            setOrderedProdItemStatuses(null);
+            toast({
+              title: "Error",
+              description: e instanceof Error ? e.message : String(e),
+              variant: "destructive",
+            });
+          },
+        },
+      );
+    },
+    [displayProdItemStatuses, reorderStatuses, toast],
+  );
 
   return (
     <Card className="min-w-0 max-w-full shadow-card">
@@ -489,7 +662,7 @@ function ProductionItemStatusesSection() {
           <Palette className="h-4 w-4" />
           Production Item Statuses
         </CardTitle>
-        <Badge variant="outline">{statuses.length}</Badge>
+        <Badge variant="outline">{displayProdItemStatuses.length}</Badge>
       </CardHeader>
       <CardContent className="border-b p-3">
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -503,7 +676,7 @@ function ProductionItemStatusesSection() {
                 display_name: newDisplay.trim(),
                 color: newColor,
                 active: true,
-                sequence: statuses.length + 1,
+                sequence: displayProdItemStatuses.length + 1,
               });
               setNewDisplay("");
               setNewColor("#6b7280");
@@ -514,26 +687,52 @@ function ProductionItemStatusesSection() {
           </Button>
         </div>
       </CardContent>
-      <CardContent className="space-y-2">
-        {statuses.map((status, index) => (
-          <div key={status.id} className="flex min-w-0 flex-col gap-2 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-start gap-2">
-              <span className="mt-1 h-3 w-3 shrink-0 rounded-full border" style={{ backgroundColor: status.color }} />
-              <div className="min-w-0">
-                <p className="break-words font-medium">{status.display_name}</p>
-                <p className="break-all font-mono text-xs text-muted-foreground">{status.name}</p>
+      <CardContent>
+        <DragDropContext onDragEnd={handleProdItemStatusesDragEnd}>
+          <Droppable droppableId="production-item-statuses-list">
+            {(dropProvided) => (
+              <div ref={dropProvided.innerRef} {...dropProvided.droppableProps} className="space-y-2">
+                {displayProdItemStatuses.map((status, idx) => (
+                  <Draggable key={status.id} draggableId={status.id} index={idx}>
+                    {(dragProvided, snap) => (
+                      <div
+                        ref={dragProvided.innerRef}
+                        {...dragProvided.draggableProps}
+                        className={cn(
+                          "flex min-w-0 flex-col gap-2 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between",
+                          snap.isDragging && "bg-muted/60 shadow-md",
+                        )}
+                      >
+                        <div className="flex min-w-0 items-start gap-2 sm:items-center sm:flex-1">
+                          <button
+                            type="button"
+                            className="mt-0.5 shrink-0 cursor-grab touch-none rounded-sm p-1 text-muted-foreground active:cursor-grabbing hover:bg-muted sm:mt-0"
+                            {...dragProvided.dragHandleProps}
+                            aria-label="Drag to reorder status"
+                          >
+                            <GripVertical className="h-4 w-4" />
+                          </button>
+                          <span className="mt-1 h-3 w-3 shrink-0 rounded-full border sm:mt-0" style={{ backgroundColor: status.color }} />
+                          <div className="min-w-0">
+                            <p className="break-words font-medium">{status.display_name}</p>
+                            <p className="break-all font-mono text-xs text-muted-foreground">{status.name}</p>
+                          </div>
+                        </div>
+                        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
+                          <Switch checked={status.active} onCheckedChange={(checked) => updateStatus.mutate({ id: status.id, active: checked })} />
+                          <Button size="sm" variant="destructive" onClick={() => deleteStatus.mutate(status.id)}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </Draggable>
+                ))}
+                {dropProvided.placeholder}
               </div>
-            </div>
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <Switch checked={status.active} onCheckedChange={(checked) => updateStatus.mutate({ id: status.id, active: checked })} />
-              <Button size="sm" variant="outline" onClick={() => moveStatus(index, -1)}>Up</Button>
-              <Button size="sm" variant="outline" onClick={() => moveStatus(index, 1)}>Down</Button>
-              <Button size="sm" variant="destructive" onClick={() => deleteStatus.mutate(status.id)}>
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            </div>
-          </div>
-        ))}
+            )}
+          </Droppable>
+        </DragDropContext>
       </CardContent>
     </Card>
   );

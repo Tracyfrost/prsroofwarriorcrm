@@ -1,8 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { PageWrapper } from "@/components/PageWrapper";
-import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -22,6 +20,7 @@ import { CustomerSearchBar } from "@/components/customer/CustomerSearchBar";
 import { CustomerCardList } from "@/components/customer/CustomerCardList";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useCustomers } from "@/hooks/useCustomer";
 
 // MOBILE-PORT: Maps to React Native FlatList (mobile) / Table (tablet+)
 
@@ -44,17 +43,7 @@ export default function Customers() {
   const { can } = usePermissions();
   const isMobile = useIsMobile();
 
-  const { data: customers = [], isLoading } = useQuery({
-    queryKey: ["customers"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("customers")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+  const { data: customers = [], isLoading } = useCustomers();
 
   const getPhones = (c: any): string[] => {
     const ci = c.contact_info as any;

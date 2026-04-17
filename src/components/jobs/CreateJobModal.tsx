@@ -93,7 +93,11 @@ export function CreateJobModal({
   const { data: customers = [] } = useQuery({
     queryKey: ["customers-list"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("customers").select("id, name, main_address").order("name");
+      const { data, error } = await supabase
+        .from("customers")
+        .select("id, name, main_address")
+        .is("archived_at", null)
+        .order("name");
       if (error) throw error;
       return data ?? [];
     },

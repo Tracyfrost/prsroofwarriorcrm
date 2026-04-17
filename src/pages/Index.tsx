@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageWrapper } from "@/components/PageWrapper";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,6 +30,8 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { AddCustomerModal } from "@/components/customer/AddCustomerModal";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ResponsiveModal } from "@/components/ui/responsive-modal";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,6 +40,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useNavigate } from "react-router-dom";
+
+type WarRoomJobRow = {
+  id: string;
+  job_id: string;
+  status: string;
+  claim_number: string | null;
+  customers: { name: string | null } | null;
+};
 
 function StatCard({ title, value, icon: Icon, trend, to }: {
   title: string;
@@ -123,11 +134,14 @@ function LaunchAction({
 }
 
 export default function Index() {
+  const navigate = useNavigate();
   const { data: profile } = useProfile();
   const { data: myProfile } = useMyProfile();
   const { data: myRoles = [] } = useUserRoles();
   const { can } = usePermissions();
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
+  const [warRoomPickerOpen, setWarRoomPickerOpen] = useState(false);
+  const [warRoomSearch, setWarRoomSearch] = useState("");
   const isAdmin = myRoles.some((r) => ["manager", "owner", "office_admin"].includes(r));
   const levelConfig = LEVEL_CONFIG[myProfile?.level ?? "lvl1"] || LEVEL_CONFIG.lvl1;
 
@@ -136,7 +150,8 @@ export default function Index() {
     queryFn: async () => {
       const { count, error } = await supabase
         .from("customers")
-        .select("*", { count: "exact", head: true });
+        .select("*", { count: "exact", head: true })
+        .is("archived_at", null);
       if (error) throw error;
       return count ?? 0;
     },
@@ -160,12 +175,59 @@ export default function Index() {
       const { data, error } = await supabase
         .from("customers")
         .select("*")
+        .is("archived_at", null)
         .order("created_at", { ascending: false })
         .limit(5);
       if (error) throw error;
       return data ?? [];
     },
   });
+
+  const { data: warRoomJobs = [], isLoading: warRoomJobsLoading } = useQuery({
+    queryKey: ["war-room-jobs-picker"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("jobs")
+        .select("id, job_id, status, claim_number, customers(name)")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as WarRoomJobRow[];
+    },
+  });
+
+  const rankedWarRoomJobs = useMemo(() => {
+    const q = warRoomSearch.trim().toLowerCase();
+    if (!q) return warRoomJobs;
+
+    const score = (job: WarRoomJobRow) => {
+      const jobId = String(job.job_id ?? "").toLowerCase();
+      const customer = String(job.customers?.name ?? "").toLowerCase();
+      const claimRef = String(job.claim_number ?? "").toLowerCase();
+      const status = String(job.status ?? "").toLowerCase();
+
+      if (jobId === q) return 1;
+      if (jobId.startsWith(q)) return 2;
+      if (customer.startsWith(q)) return 3;
+      if (claimRef.startsWith(q)) return 4;
+      if (jobId.includes(q)) return 5;
+      if (customer.includes(q)) return 6;
+      if (claimRef.includes(q)) return 7;
+      if (status.includes(q)) return 8;
+      return 99;
+    };
+
+    return warRoomJobs
+      .map((job) => ({ job, rank: score(job) }))
+      .filter((entry) => entry.rank < 99)
+      .sort((a, b) => a.rank - b.rank || a.job.job_id.localeCompare(b.job.job_id))
+      .map((entry) => entry.job);
+  }, [warRoomJobs, warRoomSearch]);
+
+  const handleOpenWarRoomForJob = (jobId: string) => {
+    setWarRoomPickerOpen(false);
+    setWarRoomSearch("");
+    navigate(`/operations/${jobId}`, { state: { openWarRoom: true } });
+  };
 
   usePageTitle("Dashboard");
 
@@ -241,11 +303,69 @@ export default function Index() {
                   to="/production"
                 />
               )}
+              {can("view_production") && (
+                <LaunchAction
+                  icon={LayoutGrid}
+                  title="War Room"
+                  description="Pick a job and jump to War Room."
+                  onClick={() => setWarRoomPickerOpen(true)}
+                />
+              )}
             </div>
           </CardContent>
         </Card>
 
         <AddCustomerModal open={addCustomerOpen} onOpenChange={setAddCustomerOpen} />
+        <ResponsiveModal
+          open={warRoomPickerOpen}
+          onOpenChange={setWarRoomPickerOpen}
+          title="Open War Room"
+          description="Search jobs or customers, then select a job."
+          className="max-w-xl"
+        >
+          <div className="space-y-3">
+            <Input
+              value={warRoomSearch}
+              onChange={(e) => setWarRoomSearch(e.target.value)}
+              placeholder="Search job ID, customer, claim/cash ref, or status"
+              autoFocus
+            />
+            <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+              {warRoomJobsLoading ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">Loading jobs...</p>
+              ) : rankedWarRoomJobs.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  No jobs matched. Try job ID, customer name, claim/cash ref, or status.
+                </p>
+              ) : (
+                rankedWarRoomJobs.map((job) => (
+                  <button
+                    key={job.id}
+                    type="button"
+                    onClick={() => handleOpenWarRoomForJob(job.id)}
+                    className="w-full rounded-lg border px-3 py-2 text-left transition-colors hover:border-accent/40 hover:bg-muted/50"
+                    aria-label={`Open War Room for ${job.job_id}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground">
+                          {job.customers?.name || "Unknown customer"}
+                          {` · Ref ${job.claim_number || "N/A"}`}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          Job ID: {job.job_id}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="shrink-0 capitalize text-[10px]">
+                        {job.status}
+                      </Badge>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </ResponsiveModal>
 
         <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 md:bottom-8">
           <DropdownMenu>

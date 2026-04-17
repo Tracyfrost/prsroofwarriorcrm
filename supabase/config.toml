@@ -11,6 +11,9 @@ verify_jwt = false
 # JWT is validated inside the function (Bearer + auth.getUser). Disables gateway duplicate check that caused 401 Invalid JWT for valid sessions.
 verify_jwt = false
 
+[functions.slack-notify]
+verify_jwt = false
+
 # Auth URLs for Vercel production + previews + local dev (pushed with `supabase config push`).
 [auth]
 site_url = "https://prsroofwarriorcrm-main.vercel.app"

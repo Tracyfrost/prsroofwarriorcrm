@@ -156,6 +156,7 @@ export type ProfileUpdatePayload = {
   signature_url?: string | null;
   signature_text?: string | null;
   profile_picture_url?: string | null;
+  slack_user_id?: string | null;
 };
 
 export function useUpdateProfile() {

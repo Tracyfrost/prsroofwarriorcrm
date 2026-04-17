@@ -4,16 +4,17 @@ import type { Tables } from "@/integrations/supabase/types";
 
 export type Customer = Tables<"customers">;
 
-export function useCustomer(id: string | undefined) {
+export function useCustomer(id: string | undefined, options?: { includeArchived?: boolean }) {
+  const includeArchived = options?.includeArchived ?? false;
   return useQuery({
-    queryKey: ["customer", id],
+    queryKey: ["customer", id, includeArchived],
     enabled: !!id,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("customers")
-        .select("*")
-        .eq("id", id!)
-        .maybeSingle();
+      let query = supabase.from("customers").select("*").eq("id", id!);
+      if (!includeArchived) {
+        query = query.is("archived_at", null);
+      }
+      const { data, error } = await query.maybeSingle();
       if (error) throw error;
       return data;
     },
@@ -24,7 +25,26 @@ export function useCustomers() {
   return useQuery({
     queryKey: ["customers"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("customers").select("*").order("created_at", { ascending: false });
+      const { data, error } = await supabase
+        .from("customers")
+        .select("*")
+        .is("archived_at", null)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as Customer[];
+    },
+  });
+}
+
+export function useArchivedCustomers() {
+  return useQuery({
+    queryKey: ["customers", "archived"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("customers")
+        .select("*")
+        .not("archived_at", "is", null)
+        .order("archived_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as Customer[];
     },

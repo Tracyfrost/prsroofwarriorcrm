@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
+import { sendChannelNotification, sendDMNotification } from "@/lib/notifications/slackService";
+import { SlackNotificationType } from "@/lib/notifications/notificationTypes";
 
 /* ── Lead Packages ────────────────────────────────── */
 
@@ -72,17 +74,70 @@ export function useCreateLeadAssignment() {
       package_id?: string;
       assigned_rep_id: string;
     }) => {
-      const { data, error } = await supabase
+      const { data: assignment, error } = await supabase
         .from("lead_assignments")
         .insert(a)
         .select()
         .single();
       if (error) throw error;
-      return data;
+
+      const { data: customer } = await supabase
+        .from("customers")
+        .select("name, city, state")
+        .eq("id", a.customer_id)
+        .maybeSingle();
+
+      const { data: leadSource } = await supabase
+        .from("lead_sources")
+        .select("name")
+        .eq("id", a.lead_source_id)
+        .maybeSingle();
+
+      const { data: repProfile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("user_id", a.assigned_rep_id)
+        .maybeSingle();
+
+      const customerFullName = customer?.name?.trim() || "Unknown Customer";
+      const serviceType = leadSource?.name?.trim() || "";
+      const repName = repProfile?.full_name?.trim() || "Unassigned";
+      const repSlackUserId = repProfile?.slack_user_id?.trim() || null;
+      const city = customer?.city?.trim() || "";
+      const state = customer?.state?.trim() || "";
+      const cityState = city && state ? `${city}, ${state}` : city || state || "";
+
+      return {
+        assignment,
+        customerFullName,
+        serviceType,
+        repName,
+        repSlackUserId,
+        cityState,
+      };
     },
-    onSuccess: () => {
+    onSuccess: async (result) => {
       qc.invalidateQueries({ queryKey: ["lead_assignments"] });
       qc.invalidateQueries({ queryKey: ["lead_packages"] });
+
+      try {
+        const line1 = result.serviceType
+          ? `🆕 New Lead: *${result.customerFullName}* — ${result.serviceType}`
+          : `🆕 New Lead: *${result.customerFullName}*`;
+        const line2 = `👤 Assigned to: ${result.repName || "Unassigned"}`;
+        const line3 = result.cityState ? `📍 ${result.cityState}` : "📍";
+        const channelMessage = `${line1}\n${line2}\n${line3}`;
+        await sendChannelNotification(SlackNotificationType.NewLeadChannel, channelMessage);
+
+        if (result.repSlackUserId) {
+          const dmLocationLine = result.cityState ? `📍 ${result.cityState}` : "📍";
+          const dmMessage = `📋 You have a new lead assigned: *${result.customerFullName}*\n${dmLocationLine}\nCheck it out in PRS CRM.`;
+          await sendDMNotification(SlackNotificationType.LeadAssignedDm, result.repSlackUserId, dmMessage);
+        }
+      } catch (slackError) {
+        console.warn("Lead created, but Slack notification failed:", slackError);
+      }
+
       toast({ title: "Lead Deployed", description: "Lead assigned from the Arsenal." });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),

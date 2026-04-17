@@ -112,7 +112,8 @@ export default function CustomerDetail() {
   const { user } = useAuth();
   const qc = useQueryClient();
 
-  const { data: customer, isLoading } = useCustomer(id);
+  const includeArchived = searchParams.get("archived") === "1";
+  const { data: customer, isLoading } = useCustomer(id, { includeArchived });
   const { data: jobs = [] } = useCustomerJobs(id);
   const { data: appointments = [] } = useCustomerAppointments(id);
   const { data: documents = [] } = useCustomerDocuments(id);
@@ -360,7 +361,7 @@ export default function CustomerDetail() {
     return (
       <AppLayout>
         <div className="text-center py-20">
-          <p className="text-muted-foreground">Customer not found</p>
+          <p className="text-muted-foreground">Customer not found or archived.</p>
           <Button variant="ghost" onClick={() => navigate("/customers")} className="mt-4">
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Customers
           </Button>

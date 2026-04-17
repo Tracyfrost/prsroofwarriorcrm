@@ -3,6 +3,8 @@ export type JobNavigationState = {
   customerId?: string;
   /** Deep link: Operations opens War Room + Job files; Job detail opens Production + Job files */
   openJobFiles?: boolean;
+  /** Deep link: Operations opens War Room (Production Items) sub-tab */
+  openWarRoom?: boolean;
 };
 
 export function customerJobsState(customerId: string): JobNavigationState {

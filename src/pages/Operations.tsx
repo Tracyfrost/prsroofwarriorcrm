@@ -131,16 +131,30 @@ export default function Operations() {
 
   useEffect(() => {
     const s = location.state as JobNavigationState | null;
-    if (!s?.openJobFiles || !id) return;
-    setActiveTab("items");
-    setProductionInitialSubTab("job-files");
-    setProductionSectionKey((k) => k + 1);
-    const { openJobFiles: _removed, ...rest } = s;
-    const nextState = Object.keys(rest).length > 0 ? (rest as JobNavigationState) : null;
-    navigate(
-      { pathname: location.pathname, search: location.search, hash: location.hash },
-      { replace: true, state: nextState },
-    );
+    if (!id || !s) return;
+    if (s.openJobFiles) {
+      setActiveTab("items");
+      setProductionInitialSubTab("job-files");
+      setProductionSectionKey((k) => k + 1);
+      const { openJobFiles: _removed, ...rest } = s;
+      const nextState = Object.keys(rest).length > 0 ? (rest as JobNavigationState) : null;
+      navigate(
+        { pathname: location.pathname, search: location.search, hash: location.hash },
+        { replace: true, state: nextState },
+      );
+      return;
+    }
+    if (s.openWarRoom) {
+      setActiveTab("items");
+      setProductionInitialSubTab("war-room");
+      setProductionSectionKey((k) => k + 1);
+      const { openWarRoom: _removed, ...rest } = s;
+      const nextState = Object.keys(rest).length > 0 ? (rest as JobNavigationState) : null;
+      navigate(
+        { pathname: location.pathname, search: location.search, hash: location.hash },
+        { replace: true, state: nextState },
+      );
+    }
   }, [location.state, location.pathname, location.search, location.hash, id, navigate]);
 
   useEffect(() => {

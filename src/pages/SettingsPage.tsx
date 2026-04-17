@@ -29,7 +29,7 @@ import {
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { Switch } from "@/components/ui/switch";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Network, Hammer, Plus, ShieldCheck, ShieldX, Pencil, Trash2, Sliders, Settings2, Calendar, CreditCard, Shield, Swords, Receipt, FileSpreadsheet, GripVertical } from "lucide-react";
+import { Network, Hammer, Plus, ShieldCheck, ShieldX, Pencil, Trash2, Sliders, Settings2, Calendar, CreditCard, Shield, Swords, Receipt, FileSpreadsheet, GripVertical, Slack } from "lucide-react";
 import { UserAdminTable } from "@/components/UserAdminTable";
 import { CustomizationsTab } from "@/components/settings/CustomizationsTab";
 import { GlobalSettingsTab } from "@/components/settings/GlobalSettingsTab";
@@ -39,6 +39,8 @@ import { BrandingTab } from "@/components/settings/BrandingTab";
 import { AlliesTab } from "@/components/settings/AlliesTab";
 import { ExpenseTypesTab } from "@/components/settings/ExpenseTypesTab";
 import { DataForgeTab } from "@/components/settings/DataForgeTab";
+import { CustomerLifecycleTab } from "@/components/settings/CustomerLifecycleTab";
+import { SlackSettings } from "@/components/settings/SlackSettings";
 import {
   ContextualTabsPortal,
   contextualTabListClassName,
@@ -189,6 +191,13 @@ export default function SettingsPage() {
                   <Calendar className="h-3.5 w-3.5 shrink-0" />
                   Integrations
                 </TabsTrigger>
+                <TabsTrigger
+                  value="slack"
+                  className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}
+                >
+                  <Slack className="h-3.5 w-3.5 shrink-0" />
+                  Slack
+                </TabsTrigger>
                 <TabsTrigger value="globals" className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
                   <Settings2 className="h-3.5 w-3.5 shrink-0" />
                   Global
@@ -219,6 +228,12 @@ export default function SettingsPage() {
                   <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
                   Data Forge
                 </TabsTrigger>
+                <TabsTrigger
+                  value="customer_lifecycle"
+                  className={contextualTabTriggerSidebarClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}
+                >
+                  Customer Lifecycle
+                </TabsTrigger>
               </TabsList>
             </ContextualTabsPortal>
             <TabsList className={contextualTabListClassName("md:hidden")}>
@@ -235,6 +250,10 @@ export default function SettingsPage() {
               <TabsTrigger value="integrations" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
                 <Calendar className="h-3.5 w-3.5 shrink-0" />
                 Integrations
+              </TabsTrigger>
+              <TabsTrigger value="slack" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
+                <Slack className="h-3.5 w-3.5 shrink-0" />
+                Slack
               </TabsTrigger>
               <TabsTrigger value="globals" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
                 <Settings2 className="h-3.5 w-3.5 shrink-0" />
@@ -259,6 +278,9 @@ export default function SettingsPage() {
               <TabsTrigger value="data_forge" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
                 <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
                 Data Forge
+              </TabsTrigger>
+              <TabsTrigger value="customer_lifecycle" className={contextualTabTriggerClassName("inline-flex items-center gap-1.5 text-xs sm:text-sm")}>
+                Customer Lifecycle
               </TabsTrigger>
             </TabsList>
 
@@ -439,6 +461,10 @@ export default function SettingsPage() {
               <IntegrationsTab />
             </TabsContent>
 
+            <TabsContent value="slack" className="mt-0">
+              <SlackSettings />
+            </TabsContent>
+
             <TabsContent value="globals" className="mt-0">
               <GlobalSettingsTab />
             </TabsContent>
@@ -461,6 +487,10 @@ export default function SettingsPage() {
 
             <TabsContent value="data_forge" className="mt-0">
               <DataForgeTab />
+            </TabsContent>
+
+            <TabsContent value="customer_lifecycle" className="mt-0">
+              <CustomerLifecycleTab />
             </TabsContent>
             </div>
           </Tabs>

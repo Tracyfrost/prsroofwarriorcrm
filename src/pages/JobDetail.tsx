@@ -59,6 +59,9 @@ const ASSIGNMENT_ROLES = [
   { value: "field_tech", label: "Field Tech" },
 ];
 
+const jobDetailKpiButtonClass =
+  "w-full min-h-[44px] rounded-lg p-4 text-left transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 cursor-pointer sm:min-h-0";
+
 export default function JobDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -127,6 +130,12 @@ export default function JobDetail() {
   const { data: subJobsList = [] } = useSubJobs(isMainJob ? job?.id : undefined);
   const navState = (location.state as JobNavigationState | null) ?? null;
   const backToJobsPath = resolveJobsBackPath(navState);
+
+  const handleGoToWarRoom = useCallback(() => {
+    if (!id) return;
+    const state: JobNavigationState = { ...navState, openWarRoom: true };
+    navigate(`/operations/${id}`, { state });
+  }, [id, navigate, navState]);
 
   useEffect(() => {
     const s = location.state as JobNavigationState | null;
@@ -595,6 +604,24 @@ export default function JobDetail() {
                onToggleSupplement={handleToggleSupplement}
              />
            </div>
+
+          {/* War Room shortcut — matches customer KPI card affordance */}
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:max-w-md">
+            <Card className="shadow-card">
+              <CardContent className="p-0">
+                <button
+                  type="button"
+                  className={jobDetailKpiButtonClass}
+                  aria-label="Open War Room for this job in Operations"
+                  onClick={handleGoToWarRoom}
+                >
+                  <p className="text-xs text-muted-foreground">War Room</p>
+                  <p className="text-lg font-bold text-foreground">Open</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Production items & workbook</p>
+                </button>
+              </CardContent>
+            </Card>
+          </div>
          </div>
 
         {/* Job sections — primary tabs portaled under header on md+ */}
@@ -639,6 +666,20 @@ export default function JobDetail() {
             <TabsContent value="info" className="mt-0 space-y-4">
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
                 <div className="space-y-4">
+                  <Card className="shadow-card">
+                    <CardContent className="p-0">
+                      <button
+                        type="button"
+                        className={jobDetailKpiButtonClass}
+                        aria-label="Open War Room for this job in Operations"
+                        onClick={handleGoToWarRoom}
+                      >
+                        <p className="text-xs text-muted-foreground">War Room</p>
+                        <p className="text-lg font-bold text-foreground">Open in Operations</p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">Production items, scope, and gates</p>
+                      </button>
+                    </CardContent>
+                  </Card>
                   <CustomerInfoCard customer={customer} />
                   <SiteAddressCard
                     siteAddress={siteAddress}

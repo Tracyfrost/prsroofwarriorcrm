@@ -206,6 +206,7 @@ export function useLeadSourceUsageCount(name: string) {
       const { count, error } = await supabase
         .from("customers")
         .select("id", { count: "exact", head: true })
+        .is("archived_at", null)
         .eq("lead_source", name as any);
       if (error) throw error;
       return count ?? 0;

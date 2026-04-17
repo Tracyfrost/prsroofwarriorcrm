@@ -286,6 +286,9 @@ export type Database = {
       }
       customers: {
         Row: {
+          archive_reason: string | null
+          archived_at: string | null
+          archived_by: string | null
           assigned_rep_id: string | null
           billing_address: Json | null
           company_name: string | null
@@ -307,6 +310,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          archive_reason?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
           assigned_rep_id?: string | null
           billing_address?: Json | null
           company_name?: string | null
@@ -328,6 +334,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          archive_reason?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
           assigned_rep_id?: string | null
           billing_address?: Json | null
           company_name?: string | null
@@ -1699,6 +1708,7 @@ export type Database = {
           override_rate: number
           phone: string | null
           phone_secondary: string | null
+          slack_user_id: string | null
           profile_picture_url: string | null
           signature_text: string | null
           signature_url: string | null
@@ -1723,6 +1733,7 @@ export type Database = {
           override_rate?: number
           phone?: string | null
           phone_secondary?: string | null
+          slack_user_id?: string | null
           profile_picture_url?: string | null
           signature_text?: string | null
           signature_url?: string | null
@@ -1747,6 +1758,7 @@ export type Database = {
           override_rate?: number
           phone?: string | null
           phone_secondary?: string | null
+          slack_user_id?: string | null
           profile_picture_url?: string | null
           signature_text?: string | null
           signature_url?: string | null

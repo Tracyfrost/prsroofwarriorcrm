@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import { sendChannelNotification, sendDMNotification } from "@/lib/notifications/slackService";
+import { SlackNotificationType } from "@/lib/notifications/notificationTypes";
 
 export type Job = Tables<"jobs"> & { customers?: { name: string; id: string } | null };
 
@@ -169,20 +171,69 @@ export function useUpdateJob() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...updates }: TablesUpdate<"jobs"> & { id: string }) => {
-      const { data, error } = await supabase
+      const { data: updatedJob, error } = await supabase
         .from("jobs")
         .update(updates)
         .eq("id", id)
         .select()
         .single();
       if (error) throw error;
-      return data;
+
+      const { data: jobWithCustomer } = await supabase
+        .from("jobs")
+        .select("id, job_id, status, customers(name)")
+        .eq("id", id)
+        .maybeSingle();
+
+      const { data: assignments } = await supabase
+        .from("job_assignments")
+        .select("user_id, assignment_role")
+        .eq("job_id", id);
+
+      const primaryRep = (assignments ?? []).find((a) => a.assignment_role === "primary_rep");
+
+      let pmName = "Unassigned";
+      let pmSlackUserId: string | null = null;
+      if (primaryRep?.user_id) {
+        const { data: pmProfile } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("user_id", primaryRep.user_id)
+          .maybeSingle();
+        pmName = pmProfile?.name?.trim() || "Unassigned";
+        pmSlackUserId = (pmProfile as any)?.slack_user_id?.trim() || null;
+      }
+
+      const customerFullName = (jobWithCustomer as any)?.customers?.name?.trim() || "Unknown Customer";
+      const jobNumber = jobWithCustomer?.job_id || updatedJob.job_id || id;
+      const newStatus = String(updatedJob.status ?? updates.status ?? "updated");
+
+      return {
+        ...updatedJob,
+        customerFullName,
+        jobNumber,
+        newStatus,
+        pmName,
+        pmSlackUserId,
+      };
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       qc.invalidateQueries({ queryKey: ["jobs"] });
       qc.invalidateQueries({ queryKey: ["main-jobs"] });
       qc.invalidateQueries({ queryKey: ["job", data.id] });
       qc.invalidateQueries({ queryKey: ["sub-jobs"] });
+
+      try {
+        const channelMessage = `🔄 Job Status Update: *${data.customerFullName}*\n📋 Job #${data.jobNumber} moved to: *${data.newStatus}*\n👤 Project Manager: ${data.pmName || "Unassigned"}`;
+        await sendChannelNotification(SlackNotificationType.JobStatusChangedChannel, channelMessage);
+
+        if (data.pmSlackUserId) {
+          const dmMessage = `🏗️ Job update on your watch: *${data.customerFullName}*\n📋 Job #${data.jobNumber} is now: *${data.newStatus}*\nCheck it out in PRS CRM.`;
+          await sendDMNotification(SlackNotificationType.JobAssignedDm, data.pmSlackUserId, dmMessage);
+        }
+      } catch (slackError) {
+        console.warn("Job status updated, but Slack notification failed:", slackError);
+      }
     },
   });
 }

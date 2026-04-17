@@ -78,7 +78,10 @@ export function ReportDashboard() {
   const { data: customerCount = 0 } = useQuery({
     queryKey: ["report-customer-count"],
     queryFn: async () => {
-      const { count, error } = await supabase.from("customers").select("*", { count: "exact", head: true });
+      const { count, error } = await supabase
+        .from("customers")
+        .select("*", { count: "exact", head: true })
+        .is("archived_at", null);
       if (error) throw error;
       return count ?? 0;
     },

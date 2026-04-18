@@ -138,8 +138,9 @@ export async function sendSlackConnectionTest(): Promise<void> {
   const { data, error } = await supabase
     .from("global_settings")
     .select("value")
-    .eq("key", SLACK_WEBHOOK_URL_KEY)
-    .maybeSingle();
+    .eq("key", "slack_webhook_url")
+    .single();
+  console.log("DB result:", JSON.stringify(data), "error:", error?.message);
 
   if (error) {
     throw new Error(error.message || "Failed to load Slack webhook URL from global settings.");

@@ -539,6 +539,7 @@ export function UserAdminTable({ users, isLoading }: UserAdminTableProps) {
                         <div className="flex items-center gap-1.5">
                           <Link
                             to={`/users/${u.user_id}`}
+                            state={{ fromSettingsUsers: true }}
                             className="font-medium text-sm text-primary hover:underline"
                           >
                             {u.name || "—"}

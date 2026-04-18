@@ -183,14 +183,9 @@ export function useDeleteJobStatus() {
 export function useBulkUpdateJobStatusOrder() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (statuses: { id: string; sequence: number }[]) => {
-      for (const s of statuses) {
-        const { error } = await supabase
-          .from("flow_stages")
-          .update({ sequence: s.sequence } as any)
-          .eq("id", s.id);
-        if (error) throw error;
-      }
+    mutationFn: async (orderedIds: string[]) => {
+      const { error } = await supabase.rpc("apply_flow_stage_order", { ordered_ids: orderedIds });
+      if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["job-statuses"] }),
   });
@@ -303,14 +298,9 @@ export function useDeleteProductionMilestone() {
 export function useBulkUpdateMilestoneOrder() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (milestones: { id: string; sequence: number }[]) => {
-      for (const m of milestones) {
-        const { error } = await supabase
-          .from("flow_stages")
-          .update({ sequence: m.sequence } as any)
-          .eq("id", m.id);
-        if (error) throw error;
-      }
+    mutationFn: async (orderedIds: string[]) => {
+      const { error } = await supabase.rpc("apply_flow_stage_order", { ordered_ids: orderedIds });
+      if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["production-milestones"] }),
   });
@@ -390,14 +380,9 @@ export function useDeleteProductionItemStatus() {
 export function useBulkUpdateProductionItemStatusOrder() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (statuses: { id: string; sequence: number }[]) => {
-      for (const s of statuses) {
-        const { error } = await supabase
-          .from("flow_stages")
-          .update({ sequence: s.sequence } as any)
-          .eq("id", s.id);
-        if (error) throw error;
-      }
+    mutationFn: async (orderedIds: string[]) => {
+      const { error } = await supabase.rpc("apply_flow_stage_order", { ordered_ids: orderedIds });
+      if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["production-item-statuses"] }),
   });

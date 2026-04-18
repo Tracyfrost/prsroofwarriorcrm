@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/lib/auth";
 import { useProfileByUserId, useUpdateProfile } from "@/hooks/useHierarchy";
@@ -48,9 +48,12 @@ const DOC_TYPES = [
   { value: "profile_pic", label: "Profile Pics", icon: Image },
 ] as const;
 
+type UserProfileLocationState = { fromSettingsUsers?: boolean };
+
 export default function UserProfilePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const { can, isOwnerOrAdmin } = usePermissions();
 
@@ -89,17 +92,21 @@ export default function UserProfilePage() {
     : 0;
   const accountHealth = profile ? accountHealthFromScore(operatorScore, profile.active) : "ok";
 
+  const fromSettingsUsers = !!(location.state as UserProfileLocationState | null)?.fromSettingsUsers;
+  const backHref = fromSettingsUsers ? "/settings" : "/";
+  const backLabel = fromSettingsUsers ? "Users & Hierarchy" : "Command Center";
+
   return (
     <AppLayout>
       <div className="p-4 lg:p-6 space-y-6">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" asChild>
-            <Link to="/">
+            <Link to={backHref}>
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
           <span className="text-sm text-muted-foreground">
-            <Link to="/" className="hover:text-foreground">Command Center</Link>
+            <Link to={backHref} className="hover:text-foreground">{backLabel}</Link>
             <span className="mx-1">/</span>
             <span className="text-foreground">{profile?.name ?? "Profile"}</span>
           </span>
@@ -112,6 +119,8 @@ export default function UserProfilePage() {
               roleLabel={roleLabel}
               onEdit={() => setEditProfileOpen(true)}
               canEdit={!!canEdit}
+              backNavHref={backHref}
+              backNavLabel={backLabel}
             />
             {editProfileOpen && (
               <EditProfileModal profile={profile} onClose={() => setEditProfileOpen(false)} />

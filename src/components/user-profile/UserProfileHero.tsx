@@ -15,11 +15,15 @@ export function UserProfileHero({
   roleLabel,
   onEdit,
   canEdit,
+  backNavHref,
+  backNavLabel,
 }: {
   profile: Profile;
   roleLabel: string;
   onEdit: () => void;
   canEdit: boolean;
+  backNavHref: string;
+  backNavLabel: string;
 }) {
   const levelCfg = LEVEL_CONFIG[profile.level] || LEVEL_CONFIG.lvl1;
   const mailto = profile.email ? `mailto:${profile.email}` : undefined;
@@ -101,7 +105,7 @@ export function UserProfileHero({
             </Button>
           )}
           <Button variant="ghost" size="sm" asChild>
-            <Link to="/">Command Center</Link>
+            <Link to={backNavHref}>{backNavLabel}</Link>
           </Button>
         </div>
       </div>

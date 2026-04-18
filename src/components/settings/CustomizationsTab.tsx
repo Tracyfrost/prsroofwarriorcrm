@@ -36,7 +36,7 @@ import {
   useUpdateProductionMilestone,
 } from "@/hooks/useCustomizations";
 import { useCreateStatusBranch, useDeleteStatusBranch, useStatusBranches, useUpdateStatusBranch } from "@/hooks/useStatusBranches";
-import { cn } from "@/lib/utils";
+import { cn, getErrorMessage } from "@/lib/utils";
 
 const toSlug = (value: string) => value.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
 
@@ -79,7 +79,7 @@ function LeadSourcesSection() {
             setOrderedSources(null);
             toast({
               title: "Error",
-              description: e instanceof Error ? e.message : String(e),
+              description: getErrorMessage(e),
               variant: "destructive",
             });
           },
@@ -242,14 +242,14 @@ function JobStatusesSection() {
       if (!reordered) return;
       setOrderedJobStatuses(reordered);
       reorderStatuses.mutate(
-        reordered.map((s, i) => ({ id: s.id, sequence: i + 1 })),
+        reordered.map((s) => s.id),
         {
           onSuccess: () => setOrderedJobStatuses(null),
           onError: (e) => {
             setOrderedJobStatuses(null);
             toast({
               title: "Error",
-              description: e instanceof Error ? e.message : String(e),
+              description: getErrorMessage(e),
               variant: "destructive",
             });
           },
@@ -515,6 +515,8 @@ function ProductionMilestonesSection() {
   const deleteMilestone = useDeleteProductionMilestone();
   const reorderMilestones = useBulkUpdateMilestoneOrder();
   const [newDisplay, setNewDisplay] = useState("");
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editDisplay, setEditDisplay] = useState("");
   const [orderedMilestones, setOrderedMilestones] = useState<ProductionMilestone[] | null>(null);
   const displayMilestones = orderedMilestones ?? milestones;
 
@@ -524,14 +526,14 @@ function ProductionMilestonesSection() {
       if (!reordered) return;
       setOrderedMilestones(reordered);
       reorderMilestones.mutate(
-        reordered.map((m, i) => ({ id: m.id, sequence: i + 1 })),
+        reordered.map((m) => m.id),
         {
           onSuccess: () => setOrderedMilestones(null),
           onError: (e) => {
             setOrderedMilestones(null);
             toast({
               title: "Error",
-              description: e instanceof Error ? e.message : String(e),
+              description: getErrorMessage(e),
               variant: "destructive",
             });
           },
@@ -576,7 +578,7 @@ function ProductionMilestonesSection() {
             {(dropProvided) => (
               <div ref={dropProvided.innerRef} {...dropProvided.droppableProps} className="space-y-2">
                 {displayMilestones.map((milestone, idx) => (
-                  <Draggable key={milestone.id} draggableId={milestone.id} index={idx}>
+                  <Draggable key={milestone.id} draggableId={milestone.id} index={idx} isDragDisabled={editId === milestone.id}>
                     {(dragProvided, snap) => (
                       <div
                         ref={dragProvided.innerRef}
@@ -587,21 +589,53 @@ function ProductionMilestonesSection() {
                         )}
                       >
                         <div className="flex min-w-0 items-start gap-2 sm:items-center sm:flex-1">
-                          <button
-                            type="button"
-                            className="mt-0.5 shrink-0 cursor-grab touch-none rounded-sm p-1 text-muted-foreground active:cursor-grabbing hover:bg-muted sm:mt-0"
-                            {...dragProvided.dragHandleProps}
-                            aria-label="Drag to reorder milestone"
-                          >
-                            <GripVertical className="h-4 w-4" />
-                          </button>
-                          <div className="min-w-0">
-                            <p className="break-words font-medium">{milestone.display_name}</p>
+                          {editId === milestone.id ? (
+                            <div className="mt-0.5 h-9 w-9 shrink-0 sm:mt-0" />
+                          ) : (
+                            <button
+                              type="button"
+                              className="mt-0.5 shrink-0 cursor-grab touch-none rounded-sm p-1 text-muted-foreground active:cursor-grabbing hover:bg-muted sm:mt-0"
+                              {...dragProvided.dragHandleProps}
+                              aria-label="Drag to reorder milestone"
+                            >
+                              <GripVertical className="h-4 w-4" />
+                            </button>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            {editId === milestone.id ? (
+                              <Input value={editDisplay} onChange={(e) => setEditDisplay(e.target.value)} className="font-medium" />
+                            ) : (
+                              <p className="break-words font-medium">{milestone.display_name}</p>
+                            )}
                             <p className="break-all font-mono text-xs text-muted-foreground">{milestone.name}</p>
                           </div>
                         </div>
                         <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
                           <Switch checked={milestone.active} onCheckedChange={(checked) => updateMilestone.mutate({ id: milestone.id, active: checked })} />
+                          {editId === milestone.id ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                if (!editDisplay.trim()) return;
+                                updateMilestone.mutate({ id: milestone.id, display_name: editDisplay.trim() });
+                                setEditId(null);
+                              }}
+                            >
+                              <Save className="h-3 w-3" />
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setEditId(milestone.id);
+                                setEditDisplay(milestone.display_name);
+                              }}
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          )}
                           <Button size="sm" variant="destructive" onClick={() => deleteMilestone.mutate(milestone.id)}>
                             <Trash2 className="h-3 w-3" />
                           </Button>
@@ -629,6 +663,9 @@ function ProductionItemStatusesSection() {
   const reorderStatuses = useBulkUpdateProductionItemStatusOrder();
   const [newDisplay, setNewDisplay] = useState("");
   const [newColor, setNewColor] = useState("#6b7280");
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editDisplay, setEditDisplay] = useState("");
+  const [editColor, setEditColor] = useState("");
   const [orderedProdItemStatuses, setOrderedProdItemStatuses] = useState<ProductionItemStatus[] | null>(null);
   const displayProdItemStatuses = orderedProdItemStatuses ?? statuses;
 
@@ -638,14 +675,14 @@ function ProductionItemStatusesSection() {
       if (!reordered) return;
       setOrderedProdItemStatuses(reordered);
       reorderStatuses.mutate(
-        reordered.map((s, i) => ({ id: s.id, sequence: i + 1 })),
+        reordered.map((s) => s.id),
         {
           onSuccess: () => setOrderedProdItemStatuses(null),
           onError: (e) => {
             setOrderedProdItemStatuses(null);
             toast({
               title: "Error",
-              description: e instanceof Error ? e.message : String(e),
+              description: getErrorMessage(e),
               variant: "destructive",
             });
           },
@@ -693,7 +730,7 @@ function ProductionItemStatusesSection() {
             {(dropProvided) => (
               <div ref={dropProvided.innerRef} {...dropProvided.droppableProps} className="space-y-2">
                 {displayProdItemStatuses.map((status, idx) => (
-                  <Draggable key={status.id} draggableId={status.id} index={idx}>
+                  <Draggable key={status.id} draggableId={status.id} index={idx} isDragDisabled={editId === status.id}>
                     {(dragProvided, snap) => (
                       <div
                         ref={dragProvided.innerRef}
@@ -704,22 +741,59 @@ function ProductionItemStatusesSection() {
                         )}
                       >
                         <div className="flex min-w-0 items-start gap-2 sm:items-center sm:flex-1">
-                          <button
-                            type="button"
-                            className="mt-0.5 shrink-0 cursor-grab touch-none rounded-sm p-1 text-muted-foreground active:cursor-grabbing hover:bg-muted sm:mt-0"
-                            {...dragProvided.dragHandleProps}
-                            aria-label="Drag to reorder status"
-                          >
-                            <GripVertical className="h-4 w-4" />
-                          </button>
-                          <span className="mt-1 h-3 w-3 shrink-0 rounded-full border sm:mt-0" style={{ backgroundColor: status.color }} />
-                          <div className="min-w-0">
-                            <p className="break-words font-medium">{status.display_name}</p>
+                          {editId === status.id ? (
+                            <div className="mt-0.5 h-9 w-9 shrink-0 sm:mt-0" />
+                          ) : (
+                            <button
+                              type="button"
+                              className="mt-0.5 shrink-0 cursor-grab touch-none rounded-sm p-1 text-muted-foreground active:cursor-grabbing hover:bg-muted sm:mt-0"
+                              {...dragProvided.dragHandleProps}
+                              aria-label="Drag to reorder status"
+                            >
+                              <GripVertical className="h-4 w-4" />
+                            </button>
+                          )}
+                          {editId === status.id ? (
+                            <Input type="color" className="mt-1 h-9 w-12 shrink-0 sm:mt-0" value={editColor} onChange={(e) => setEditColor(e.target.value)} />
+                          ) : (
+                            <span className="mt-1 h-3 w-3 shrink-0 rounded-full border sm:mt-0" style={{ backgroundColor: status.color }} />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            {editId === status.id ? (
+                              <Input value={editDisplay} onChange={(e) => setEditDisplay(e.target.value)} className="font-medium" />
+                            ) : (
+                              <p className="break-words font-medium">{status.display_name}</p>
+                            )}
                             <p className="break-all font-mono text-xs text-muted-foreground">{status.name}</p>
                           </div>
                         </div>
                         <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
                           <Switch checked={status.active} onCheckedChange={(checked) => updateStatus.mutate({ id: status.id, active: checked })} />
+                          {editId === status.id ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                if (!editDisplay.trim()) return;
+                                updateStatus.mutate({ id: status.id, display_name: editDisplay.trim(), color: editColor });
+                                setEditId(null);
+                              }}
+                            >
+                              <Save className="h-3 w-3" />
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setEditId(status.id);
+                                setEditDisplay(status.display_name);
+                                setEditColor(status.color);
+                              }}
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          )}
                           <Button size="sm" variant="destructive" onClick={() => deleteStatus.mutate(status.id)}>
                             <Trash2 className="h-3 w-3" />
                           </Button>

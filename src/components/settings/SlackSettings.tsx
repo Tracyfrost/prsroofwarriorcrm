@@ -4,6 +4,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useGlobalSettings, useUpdateGlobalSetting } from "@/hooks/useCustomizations";
 import {
@@ -33,6 +43,10 @@ function parseBoolSetting(val: unknown, fallback: boolean): boolean {
   return fallback;
 }
 
+function normalizeWebhook(val: string): string {
+  return val.trim();
+}
+
 function defaultToggleMap(): Record<SlackNotificationType, boolean> {
   const m = {} as Record<SlackNotificationType, boolean>;
   for (const row of SLACK_NOTIFICATION_UI_ROWS) {
@@ -55,14 +69,19 @@ export function SlackSettings() {
   }, [settings]);
 
   const [webhookUrl, setWebhookUrl] = useState("");
+  const [originalWebhookUrl, setOriginalWebhookUrl] = useState("");
   const [toggles, setToggles] = useState<Record<SlackNotificationType, boolean>>(defaultToggleMap);
   const [hydrated, setHydrated] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
 
   useEffect(() => {
     if (isLoading) return;
 
     const webhookRow = settings.find((s) => s.key === SLACK_WEBHOOK_URL_KEY);
-    setWebhookUrl(parseStringSetting(webhookRow?.value));
+    const loadedWebhook = parseStringSetting(webhookRow?.value);
+    setWebhookUrl(loadedWebhook);
+    setOriginalWebhookUrl(loadedWebhook);
 
     setToggles((prev) => {
       const next = { ...prev };
@@ -76,7 +95,10 @@ export function SlackSettings() {
     setHydrated(true);
   }, [isLoading, settings]);
 
-  const handleSave = async () => {
+  const webhookChanged = normalizeWebhook(webhookUrl) !== normalizeWebhook(originalWebhookUrl);
+  const confirmationValid = confirmText === "CONFIRM";
+
+  const performSave = async () => {
     const updates: { id: string; key: string; value: unknown }[] = [];
 
     const webhookId = idByKey[SLACK_WEBHOOK_URL_KEY];
@@ -105,6 +127,7 @@ export function SlackSettings() {
     try {
       await Promise.all(updates.map((u) => updateSetting.mutateAsync({ id: u.id, value: u.value })));
       invalidateSlackNotificationCache();
+      setOriginalWebhookUrl(webhookUrl);
       toast({ title: "Slack settings saved" });
     } catch (e: unknown) {
       toast({
@@ -115,9 +138,25 @@ export function SlackSettings() {
     }
   };
 
+  const handleSave = async () => {
+    if (webhookChanged) {
+      setConfirmText("");
+      setConfirmOpen(true);
+      return;
+    }
+    await performSave();
+  };
+
+  const handleConfirmSave = async () => {
+    if (!confirmationValid) return;
+    await performSave();
+    setConfirmOpen(false);
+    setConfirmText("");
+  };
+
   const handleTest = async () => {
     try {
-      await sendSlackConnectionTest();
+      await sendSlackConnectionTest(webhookUrl);
       toast({ title: "Test sent", description: "Check your Slack channel for the test message." });
     } catch (e: unknown) {
       toast({
@@ -141,7 +180,7 @@ export function SlackSettings() {
             Slack
           </CardTitle>
           <CardDescription className="text-xs">
-            Channel messages use your incoming webhook. Direct messages use the Slack app configured for the PRS CRM project.
+            Channel messages use your incoming webhook—the channel is chosen when you create that webhook in Slack. Direct messages use the Slack app configured for the PRS CRM project.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -159,7 +198,12 @@ export function SlackSettings() {
               placeholder="https://hooks.slack.com/services/..."
             />
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {webhookChanged && (
+              <span className="inline-flex items-center rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900">
+                Webhook changed
+              </span>
+            )}
             <Button type="button" variant="secondary" size="sm" onClick={handleTest} disabled={updateSetting.isPending}>
               Test Connection
             </Button>
@@ -169,6 +213,47 @@ export function SlackSettings() {
           </div>
         </CardContent>
       </Card>
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Slack webhook update</AlertDialogTitle>
+            <AlertDialogDescription>
+              Changing the Slack webhook can reroute PRS channel notifications. Type <code>CONFIRM</code> to continue.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="confirm-webhook-change" className="text-sm">
+              Type CONFIRM
+            </Label>
+            <Input
+              id="confirm-webhook-change"
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder="CONFIRM"
+              autoComplete="off"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setConfirmOpen(false);
+                setConfirmText("");
+              }}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleConfirmSave();
+              }}
+              disabled={!confirmationValid || updateSetting.isPending}
+            >
+              {updateSetting.isPending ? "Saving..." : "Confirm and Save"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Card className="shadow-card">
         <CardHeader>

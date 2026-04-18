@@ -70,12 +70,17 @@ serve(async (req) => {
     const message = payload.message.trim();
     if (payload.type === "channel") {
       const webhookUrl = payload.channelWebhookUrl?.trim() || Deno.env.get("SLACK_WEBHOOK_URL");
-      if (!webhookUrl) {
+      if (!webhookUrl || webhookUrl === "SLACK_WEBHOOK_URL") {
         return json(
-          { error: "Missing Slack webhook URL. Provide channelWebhookUrl or set SLACK_WEBHOOK_URL." },
+          {
+            error:
+              "Missing Slack webhook URL. Provide channelWebhookUrl or set SLACK_WEBHOOK_URL.",
+          },
           500,
         );
       }
+
+      console.log("webhookUrl resolved:", webhookUrl?.slice(0, 30));
 
       const webhookResponse = await fetch(webhookUrl, {
         method: "POST",

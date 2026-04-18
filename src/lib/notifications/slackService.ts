@@ -1,5 +1,10 @@
 import { supabase } from "@/integrations/supabase/client";
 import {
+  FunctionsFetchError,
+  FunctionsHttpError,
+  FunctionsRelayError,
+} from "@supabase/supabase-js";
+import {
   ALL_SLACK_SETTING_KEYS,
   SLACK_NOTIFICATION_SETTING_KEY,
   SLACK_NOTIFICATION_UI_ROWS,
@@ -100,6 +105,58 @@ function isNotificationEnabled(type: SlackNotificationType): boolean {
   return cache.toggles[type] !== false;
 }
 
+function formatSlackNotifyResponseError(payload: SlackNotifyFunctionResponse): string {
+  const err = payload.error?.trim() || "slack-notify request failed";
+  const suffix = payload.details ? ` ${payload.details}` : "";
+  return `${err}${suffix}`;
+}
+
+async function getSlackNotifyInvokeFailureMessage(
+  data: SlackNotifyFunctionResponse | null | undefined,
+  error: unknown,
+): Promise<string> {
+  if (data && typeof data.error === "string" && data.error.trim()) {
+    return formatSlackNotifyResponseError(data);
+  }
+
+  if (error instanceof FunctionsHttpError) {
+    const res = error.context as Response;
+    let rawFallback = "";
+    try {
+      const raw = await res.clone().text();
+      if (raw) {
+        try {
+          const body = JSON.parse(raw) as SlackNotifyFunctionResponse;
+          if (typeof body.error === "string" && body.error.trim()) {
+            return formatSlackNotifyResponseError(body);
+          }
+        } catch {
+          rawFallback = raw;
+        }
+      }
+    } catch {
+      rawFallback = "";
+    }
+    if (rawFallback) return rawFallback;
+    return error.message;
+  }
+
+  if (error instanceof FunctionsRelayError) {
+    return "Edge Function relay error. Check slack-notify deployment and project ref.";
+  }
+
+  if (error instanceof FunctionsFetchError) {
+    const hasSupabaseUrl = Boolean(import.meta.env.VITE_SUPABASE_URL);
+    if (!hasSupabaseUrl) {
+      return "Supabase URL is missing (VITE_SUPABASE_URL). Configure frontend env vars and restart the app.";
+    }
+    return `Could not reach slack-notify (${error.message}). Confirm the function is deployed and your Supabase URL matches this environment.`;
+  }
+
+  if (error instanceof Error) return error.message;
+  return "Unexpected error while invoking slack-notify.";
+}
+
 async function invokeSlackNotify(
   body: {
     type: "channel" | "dm";
@@ -121,56 +178,43 @@ async function invokeSlackNotify(
   );
 
   if (error) {
-    throw new Error(error.message || "Failed to invoke slack-notify function.");
+    throw new Error(await getSlackNotifyInvokeFailureMessage(data, error));
   }
 
   if (data?.error) {
-    const suffix = data.details ? ` ${data.details}` : "";
-    throw new Error(`${data.error}${suffix}`);
+    throw new Error(formatSlackNotifyResponseError(data));
   }
 
   return data ?? { success: false, error: "No response from slack-notify function." };
 }
 
-/** Test channel message using persisted webhook in global_settings. */
-export async function sendSlackConnectionTest(): Promise<void> {
-  console.log("1. Starting test connection");
-  const { data, error } = await supabase
-    .from("global_settings")
-    .select("value")
-    .eq("key", "slack_webhook_url")
-    .single();
-  console.log("DB result:", JSON.stringify(data), "error:", error?.message);
+/** Test channel message using the form value if provided, otherwise global_settings. */
+export async function sendSlackConnectionTest(webhookFromForm?: string): Promise<void> {
+  let webhookUrl = webhookFromForm?.trim() ?? "";
 
-  if (error) {
-    throw new Error(error.message || "Failed to load Slack webhook URL from global settings.");
-  }
-
-  const webhookUrl = parseWebhookValue(data?.value).trim();
-  console.log("2. Fetched webhook URL:", webhookUrl?.slice(0, 20));
   if (!webhookUrl) {
-    throw new Error("Save a Slack webhook URL before testing the connection.");
+    const { data, error } = await supabase
+      .from("global_settings")
+      .select("value")
+      .eq("key", SLACK_WEBHOOK_URL_KEY)
+      .single();
+
+    if (error) {
+      throw new Error(error.message || "Failed to load Slack webhook URL from global settings.");
+    }
+
+    webhookUrl = parseWebhookValue(data?.value).trim();
   }
 
-  console.log(
-    "3. Calling edge function with payload:",
-    JSON.stringify({ type: "channel", channelWebhookUrl: webhookUrl?.slice(0, 20) }),
-  );
+  if (!webhookUrl) {
+    throw new Error("Enter a Slack webhook URL (and save it to keep it) before testing the connection.");
+  }
 
-  const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/slack-notify`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      type: "channel",
-      message: "\u2705 PRS CRM Slack connection is working!",
-      channelWebhookUrl: webhookUrl,
-    }),
+  await invokeSlackNotify({
+    type: "channel",
+    message: "\u2705 PRS CRM Slack connection is working!",
+    channelWebhookUrl: webhookUrl,
   });
-
-  if (!response.ok) {
-    const responseText = await response.text();
-    throw new Error(responseText || `Slack test failed with status ${response.status}.`);
-  }
 }
 
 export async function sendChannelNotification(type: SlackNotificationType, message: string): Promise<void> {

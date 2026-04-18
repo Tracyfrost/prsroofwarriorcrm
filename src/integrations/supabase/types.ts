@@ -2303,6 +2303,10 @@ export type Database = {
       }
     }
     Functions: {
+      apply_flow_stage_order: {
+        Args: { ordered_ids: string[] }
+        Returns: undefined
+      },
       get_team_user_ids: {
         Args: { _manager_user_id: string }
         Returns: string[]

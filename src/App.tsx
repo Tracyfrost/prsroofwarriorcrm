@@ -35,6 +35,7 @@ import MainFinancials from "./pages/MainFinancials";
 import JobsOnly from "./pages/JobsOnly";
 import LeadArsenal from "./pages/LeadArsenal";
 import CallCommand from "./pages/CallCommand";
+import UnassignedInspectionQueue from "./pages/UnassignedInspectionQueue";
 import UserProfilePage from "./pages/UserProfilePage";
 import ArchivedCustomers from "./pages/ArchivedCustomers";
 import NotFound from "./pages/NotFound";
@@ -87,15 +88,21 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function AuthRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+  const { data: profile, isLoading: profileLoading } = useMyProfile();
   if (loading) return null;
+  if (user && profileLoading) return null;
+  if (user && profile?.must_change_password) return <Navigate to="/change-password" replace />;
   if (user) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
 function ChangePasswordRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+  const { data: profile, isLoading: profileLoading } = useMyProfile();
   if (loading) return null;
+  if (user && profileLoading) return null;
   if (!user) return <Navigate to="/auth" replace />;
+  if (profile && !profile.must_change_password) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -135,6 +142,7 @@ const App = () => (
             <Route path="/jobs-only" element={<ProtectedRoute><JobsOnly /></ProtectedRoute>} />
             <Route path="/lead-arsenal" element={<ProtectedRoute><LeadArsenal /></ProtectedRoute>} />
             <Route path="/call-command" element={<ProtectedRoute><CallCommand /></ProtectedRoute>} />
+            <Route path="/manager/unassigned-inspections" element={<ProtectedRoute><UnassignedInspectionQueue /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
             <Route path="/customers/archived" element={<ProtectedRoute><ArchivedCustomers /></ProtectedRoute>} />
             <Route path="/users/:id" element={<ProtectedRoute><UserProfilePage /></ProtectedRoute>} />

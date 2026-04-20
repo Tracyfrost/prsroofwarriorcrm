@@ -49,7 +49,7 @@ export default function ChangePassword() {
         const { error: profileError } = await supabase
           .from("profiles")
           .update({ must_change_password: false })
-          .eq("id", user.id);        // Changed from user_id → id (most common pattern)
+          .eq("user_id", user.id);
 
         if (profileError) {
           console.warn("Failed to clear must_change_password flag:", profileError);

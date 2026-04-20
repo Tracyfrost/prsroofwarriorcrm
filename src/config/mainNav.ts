@@ -4,8 +4,8 @@ import {
   User,
   Users,
   Briefcase,
-  List,
   Hammer,
+  Camera,
   Calendar,
   Shield,
   Settings,
@@ -24,18 +24,18 @@ export type MainNavItemDef = {
 };
 
 export const MAIN_NAV_ITEMS: MainNavItemDef[] = [
-  { to: "/", label: "Command Center", phraseKey: "nav_dashboard", Icon: Grid },
+  { to: "/", label: "Dashboard", phraseKey: "nav_dashboard", Icon: Grid },
   { to: "/users/me", label: "My Profile", phraseKey: "nav_my_profile", Icon: User, hideFromTopBar: true },
-  { to: "/customers", label: "Customers", phraseKey: "nav_customers", Icon: Users },
+  { to: "/customers", label: "JobVault Customers", phraseKey: "nav_customers", Icon: Users },
   {
     to: "/operations",
-    label: "Operations",
+    label: "JobVault Jobs/Board",
     phraseKey: "nav_jobs",
     Icon: Briefcase,
   },
-  { to: "/jobs-only", label: "Jobs Only", phraseKey: "nav_jobs_only", Icon: List, requiredPerm: "add_job" },
   { to: "/production", label: "Production", phraseKey: "nav_production", Icon: Hammer, requiredPerm: "view_production" },
-  { to: "/appointments", label: "Deployments", phraseKey: "nav_appointments", Icon: Calendar },
+  { to: "/sitecam", label: "SiteCam", phraseKey: "nav_sitecam", Icon: Camera, requiredPerm: "view_sitecam" },
+  { to: "/appointments", label: "Appointments", phraseKey: "nav_appointments", Icon: Calendar },
   {
     to: "/officers-hub",
     label: "Officers Hub",

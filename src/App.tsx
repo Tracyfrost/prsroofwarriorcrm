@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { useMyProfile } from "@/hooks/useHierarchy";
+import { usePermissions, type Permission } from "@/hooks/usePermissions";
 import { checkOverdueFollowUps } from "@/hooks/useCallSetter";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -106,6 +107,12 @@ function ChangePasswordRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function PermissionRoute({ children, perm }: { children: React.ReactNode; perm: Permission }) {
+  const { can } = usePermissions();
+  if (!can(perm)) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
@@ -128,11 +135,11 @@ const App = () => (
             <Route path="/commissions" element={<ProtectedRoute><Commissions /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
             <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
-            <Route path="/production" element={<ProtectedRoute><Production /></ProtectedRoute>} />
+            <Route path="/production" element={<ProtectedRoute><PermissionRoute perm="view_production"><Production /></PermissionRoute></ProtectedRoute>} />
             <Route path="/officers-hub" element={<ProtectedRoute><OfficersHub /></ProtectedRoute>} />
             <Route path="/manager" element={<ProtectedRoute><ManagerDashboard /></ProtectedRoute>} />
-            <Route path="/sitecam/capture" element={<ProtectedRoute><SiteCamCreatePhoto /></ProtectedRoute>} />
-            <Route path="/sitecam" element={<ProtectedRoute><SiteCamFeed /></ProtectedRoute>} />
+            <Route path="/sitecam/capture" element={<ProtectedRoute><PermissionRoute perm="view_sitecam"><SiteCamCreatePhoto /></PermissionRoute></ProtectedRoute>} />
+            <Route path="/sitecam" element={<ProtectedRoute><PermissionRoute perm="view_sitecam"><SiteCamFeed /></PermissionRoute></ProtectedRoute>} />
             <Route path="/battle-ledger" element={<ProtectedRoute><BattleLedger /></ProtectedRoute>} />
             <Route path="/dashboard/customers-overview" element={<ProtectedRoute><CustomersOverview /></ProtectedRoute>} />
             <Route path="/dashboard/active-jobs" element={<ProtectedRoute><ActiveJobs /></ProtectedRoute>} />
@@ -143,7 +150,7 @@ const App = () => (
             <Route path="/lead-arsenal" element={<ProtectedRoute><LeadArsenal /></ProtectedRoute>} />
             <Route path="/call-command" element={<ProtectedRoute><CallCommand /></ProtectedRoute>} />
             <Route path="/manager/unassigned-inspections" element={<ProtectedRoute><UnassignedInspectionQueue /></ProtectedRoute>} />
-            <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute><PermissionRoute perm="manage_settings"><SettingsPage /></PermissionRoute></ProtectedRoute>} />
             <Route path="/customers/archived" element={<ProtectedRoute><ArchivedCustomers /></ProtectedRoute>} />
             <Route path="/users/:id" element={<ProtectedRoute><UserProfilePage /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />

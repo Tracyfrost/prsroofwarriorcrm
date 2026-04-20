@@ -390,6 +390,12 @@ export default function Production() {
                   <Button onClick={saveDetail} className="flex-1" disabled={updateItem.isPending}>
                     {updateItem.isPending ? "Saving..." : "Save Changes"}
                   </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => navigate(`/operations/${selectedItem.job_id}`, { state: { openSiteCam: true } })}
+                  >
+                    SiteCam
+                  </Button>
                   <Button variant="outline" onClick={() => navigate(`/operations/${selectedItem.job_id}`)}>
                     View Job
                   </Button>

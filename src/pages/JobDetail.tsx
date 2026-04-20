@@ -151,6 +151,18 @@ export default function JobDetail() {
     );
   }, [location.state, location.pathname, location.search, location.hash, id, navigate]);
 
+  useEffect(() => {
+    const s = location.state as JobNavigationState | null;
+    if (!s?.openSiteCam || !id) return;
+    setJobMainTab("sitecam");
+    const { openSiteCam: _removed, ...rest } = s;
+    const nextState = Object.keys(rest).length > 0 ? (rest as JobNavigationState) : null;
+    navigate(
+      { pathname: location.pathname, search: location.search, hash: location.hash },
+      { replace: true, state: nextState },
+    );
+  }, [location.state, location.pathname, location.search, location.hash, id, navigate]);
+
   const handleAiPredict = useCallback(async () => {
     if (!job) return;
     setAiLoading(true);

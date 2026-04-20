@@ -5,6 +5,8 @@ export type JobNavigationState = {
   openJobFiles?: boolean;
   /** Deep link: Operations opens War Room (Production Items) sub-tab */
   openWarRoom?: boolean;
+  /** Deep link: Job detail opens SiteCam tab directly. */
+  openSiteCam?: boolean;
 };
 
 export function customerJobsState(customerId: string): JobNavigationState {

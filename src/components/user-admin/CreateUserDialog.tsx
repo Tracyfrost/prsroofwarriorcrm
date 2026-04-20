@@ -1,6 +1,4 @@
-import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,7 +7,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,108 +19,73 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PasswordInput } from "@/components/ui/password-input";
-import { toast } from "sonner"; // or your toast library
+import { toast } from "sonner";
 import { uiToDbRole, type UiRole } from "@/lib/role-utils";
+import type { ProfileWithHierarchy } from "@/hooks/useHierarchy";
 
-const UI_ROLES = [
+const UI_ROLES: Array<{ value: UiRole; label: string }> = [
   { value: "admin", label: "Admin" },
   { value: "manager", label: "Manager" },
   { value: "office", label: "Office" },
   { value: "sales", label: "Sales" },
-] as const;
+];
 
-export function CreateUserDialog() {
-  const [open, setOpen] = useState(false);
+export interface CreateUserPayload {
+  action: "create-user";
+  full_name: string;
+  email: string;
+  role: ReturnType<typeof uiToDbRole>;
+  password: string;
+  must_change_password: boolean;
+}
+
+interface CreateUserDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  users: ProfileWithHierarchy[];
+  isPending?: boolean;
+  onSubmit: (payload: CreateUserPayload) => void;
+}
+
+export function CreateUserDialog({ open, onOpenChange, users, isPending = false, onSubmit }: CreateUserDialogProps) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"admin" | "manager" | "office" | "sales">("sales");
+  const [role, setRole] = useState<UiRole>("sales");
   const [password, setPassword] = useState("");
   const [mustChangePassword, setMustChangePassword] = useState(true);
 
-  const queryClient = useQueryClient();
-
-  const createUserMutation = useMutation({
-    mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("user-admin", {
-        body: {
-          action: "create-user",
-          full_name: fullName.trim(),
-          email: email.trim().toLowerCase(),
-          role: uiToDbRole(role as UiRole),
-          password,
-          must_change_password: mustChangePassword,
-        },
-      });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      return data;
-    },
-    onSuccess: (data) => {
-      toast.success("User created successfully");
-      queryClient.invalidateQueries({ queryKey: ["all-profiles-hierarchy"] });
-      queryClient.invalidateQueries({ queryKey: ["audits-for-user"] });
-
-      // Show one-time temp password (Edge Function doesn't echo it back, use form value)
-      showTempPasswordModal(password);
-
-      // Reset form
-      setFullName("");
-      setEmail("");
-      setPassword("");
-      setMustChangePassword(true);
-      setOpen(false);
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to create user. Check console.");
-    },
-  });
+  const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
+  const emailInUse = useMemo(
+    () => users.some((u) => (u.email ?? "").trim().toLowerCase() === normalizedEmail),
+    [normalizedEmail, users],
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName || !email || !password) {
+    if (!fullName.trim() || !normalizedEmail || !password) {
       toast.error("All fields are required");
       return;
     }
-    createUserMutation.mutate();
-  };
-
-  const showTempPasswordModal = (tempPassword: string) => {
-    toast.success("User Created", {
-      description: (
-        <div className="space-y-3">
-          <div>
-            <p className="text-xs text-muted-foreground">Temporary Password (shown once):</p>
-            <div className="flex items-center gap-2 mt-1 bg-muted p-3 rounded font-mono text-sm break-all">
-              {tempPassword}
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              navigator.clipboard.writeText(tempPassword);
-              toast.success("Password copied!");
-            }}
-          >
-            Copy Password
-          </Button>
-          <p className="text-amber-600 text-xs font-medium">
-            ⚠️ Store this password securely. It will not be shown again.
-          </p>
-        </div>
-      ),
-      duration: 10000,
+    if (emailInUse) {
+      toast.error("This email is already in use");
+      return;
+    }
+    onSubmit({
+      action: "create-user",
+      full_name: fullName.trim(),
+      email: normalizedEmail,
+      role: uiToDbRole(role),
+      password,
+      must_change_password: mustChangePassword,
     });
+    setFullName("");
+    setEmail("");
+    setPassword("");
+    setMustChangePassword(true);
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>Create User</Button>
-      </DialogTrigger>
-
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Create New User</DialogTitle>
@@ -158,7 +120,7 @@ export function CreateUserDialog() {
 
           <div>
             <Label htmlFor="role">Role</Label>
-            <Select value={role} onValueChange={(v: any) => setRole(v)}>
+            <Select value={role} onValueChange={(v) => setRole(v as UiRole)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -193,11 +155,11 @@ export function CreateUserDialog() {
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={createUserMutation.isPending}>
-              {createUserMutation.isPending ? "Creating User..." : "Create User"}
+            <Button type="submit" disabled={isPending || emailInUse}>
+              {isPending ? "Creating User..." : "Create User"}
             </Button>
           </DialogFooter>
         </form>

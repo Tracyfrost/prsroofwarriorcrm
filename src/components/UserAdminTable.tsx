@@ -643,7 +643,7 @@ export function UserAdminTable({ users, isLoading }: UserAdminTableProps) {
                                 <KeyRound className="mr-2 h-3.5 w-3.5" /> Reset Password
                               </DropdownMenuItem>
                               <DropdownMenuItem
-                                onClick={() => userAction.mutate({ action: "resend-invite", email: u.email, userId: u.id })}
+                                onClick={() => userAction.mutate({ action: "resend-invite", email: u.email, userId: u.user_id })}
                                 disabled={isDeleted}
                               >
                                 <RefreshCw className="mr-2 h-3.5 w-3.5" /> Resend Invite

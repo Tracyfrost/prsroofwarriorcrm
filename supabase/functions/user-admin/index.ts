@@ -117,6 +117,8 @@ const RequestSchema = z.discriminatedUnion("action", [
   SoftDeleteUserSchema,
 ]);
 
+const OWNER_ROLE = "owner";
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -160,10 +162,25 @@ serve(async (req) => {
       return jsonErr("Not authenticated", 401, "NOT_AUTHENTICATED");
     }
 
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
     const { data: isAdmin } = await anonClient.rpc("is_admin", { _user_id: caller.id });
     if (!isAdmin) {
       return jsonErr("Unauthorized: admin role required", 403, "FORBIDDEN", {
         reason: "admin_required",
+      });
+    }
+
+    // User management mutations are restricted to owner/admin role.
+    const { data: callerRoles, error: callerRolesError } = await adminClient
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", caller.id);
+    if (callerRolesError) throw callerRolesError;
+    const hasOwnerRole = (callerRoles ?? []).some((r) => r.role === OWNER_ROLE);
+    if (!hasOwnerRole) {
+      return jsonErr("Unauthorized: owner role required", 403, "FORBIDDEN", {
+        reason: "owner_role_required",
       });
     }
 
@@ -181,7 +198,6 @@ serve(async (req) => {
     }
     const body = validation.data;
 
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
     let result: Record<string, unknown> = {};
 
     // For edit-user and soft-delete-user, require "highest" level
@@ -323,6 +339,15 @@ serve(async (req) => {
           .update({ must_change_password })
           .eq("user_id", userId);
         if (profileError) console.error("Profile update error:", profileError);
+
+        await adminClient.from("audits").insert({
+          user_id: caller.id,
+          subject_user_id: userId,
+          entity_type: "user",
+          action: "reset_user_password",
+          entity_id: userId,
+          details: { must_change_password, performed_by: caller.email },
+        });
 
         result = { success: true };
         break;
